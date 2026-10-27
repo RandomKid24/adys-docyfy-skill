@@ -76,6 +76,19 @@ Claude then asks a few things before it starts.
 
 Log in to the app in Chrome first if it needs a sign-in. The skill never types your passwords.
 
+## Guides for specific tasks
+
+You can ask for step-by-step guides for particular tasks instead of the whole app:
+
+```
+/docyfy make step-by-step guides for these tasks in https://staging.example.com
+1. How to punch in and punch out
+2. How to apply for leave
+3. How to submit a daily work report
+```
+
+Each task becomes its own section. It starts at the screen the reader sees first and ends at the confirmation message. Every step has a screenshot with the target highlighted and a number, plus a "Before you start" box and a table of the fields. You can also get a one-page cheat sheet for the tasks you use most.
+
 ## What it writes
 
 Everything goes in a workspace folder, so a stopped run picks up where it left off.

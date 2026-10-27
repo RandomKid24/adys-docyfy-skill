@@ -26,7 +26,7 @@ If a workspace already exists (the user names one, or `guide-workspace/*/state.j
 
 Ask these together in one call:
 
-1. **Scope**: whole software, or specific features/modules? If specific, ask which (free text via Other).
+1. **Scope**: whole software, specific modules, or **specific tasks**? Offer all three. If the person names tasks ("how to punch in", "apply for leave", "raise an invoice"), build a task guide: one module called "Tasks" (slug `tasks`), one feature per task in the order they listed, written as a plain step-by-step ("Click **Punch in**") from the first screen the reader sees (login or Home) to the confirmation message. Each task gets its own `before` box and, when the task has a form, a `fields` table. Do not map the rest of the app. If they gave no task list but said "for staff" or "for new users", propose the 5 to 8 most common daily tasks from what the menu shows and ask them to confirm or edit the list, in the same question.
 2. **Environment**: where should the guide be captured? Offer, in this order:
    - **Run it locally.** The user starts the project and gives a `localhost` address. Best option: nothing real can be harmed and no client data is on screen.
    - **Staging or demo link.** A non-production copy with dummy data, for example `staging.example.com`.
