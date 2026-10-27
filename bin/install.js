@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Installs the user-guide-builder skill into every AI tool it finds on this machine.
+// Installs the docyfy skill into every AI tool it finds on this machine.
 // No dependencies. Usage: npx github:RandomKid24/adys-docyfy-skill [options]
 "use strict";
 const fs = require("fs");
@@ -8,7 +8,7 @@ const path = require("path");
 const readline = require("readline");
 const { spawnSync } = require("child_process");
 
-const NAME = "user-guide-builder";
+const NAME = "docyfy";
 const SRC = path.join(__dirname, "..");
 const COPY = ["SKILL.md", "README.md", "requirements.txt", "assets", "references", "scripts"];
 const home = process.env.HOME || os.homedir();
@@ -29,7 +29,7 @@ const has = (f) => args.includes(f);
 const val = (f) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : null; };
 
 if (has("-h") || has("--help")) {
-  console.log(`user-guide-builder installer
+  console.log(`docyfy installer
 
   npx github:RandomKid24/adys-docyfy-skill            find AI tools and install
   --yes, -y         do not ask, install to everything found

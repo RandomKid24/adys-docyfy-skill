@@ -1,4 +1,4 @@
-# User guide builder
+# Docyfy
 
 A Claude skill that writes a click-by-click user guide for any web app. It drives the app in Claude in Chrome, takes screenshots, outlines each click target by hand-drawn ink marks, numbers them, and builds the guide.
 
@@ -49,11 +49,11 @@ To update, run the same command again. It replaces the old copy.
 ### Install by hand
 
 ```bash
-git clone https://github.com/RandomKid24/adys-docyfy-skill ~/.claude/skills/user-guide-builder
-pip install -r ~/.claude/skills/user-guide-builder/requirements.txt
+git clone https://github.com/RandomKid24/adys-docyfy-skill ~/.claude/skills/docyfy
+pip install -r ~/.claude/skills/docyfy/requirements.txt
 ```
 
-The folder name must be `user-guide-builder`.
+The folder name must be `docyfy`.
 
 `pytesseract` in the requirements is optional. It powers `check_guide.py --ocr`, which scans finished screenshots for readable personal data. It also needs the `tesseract` program (`apt install tesseract-ocr` or `brew install tesseract`).
 

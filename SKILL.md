@@ -1,6 +1,6 @@
 ---
-name: user-guide-builder
-description: Builds a click-by-click user guide (PDF, plus optional GIFs) for any web application by driving it in Claude in Chrome, taking screenshots, and marking each click target with a hand-drawn outline and a numbered badge in the BeForth look. Asks whether the person wants the whole software or only specific features, works one module at a time, saves progress to disk so work is never repeated, and reuses screenshots and common steps like login, search and pagination. Use this whenever the user asks for a user guide, user manual, help documentation, how-to guide, training material, onboarding walkthrough, feature guide, or "where to click" documentation for a web app, ERP, CRM, dashboard or admin panel, even if they never say "PDF" or "screenshots".
+name: docyfy
+description: Docyfy builds a click-by-click user guide (PDF, plus optional GIFs) for any web application by driving it in Claude in Chrome, taking screenshots, and marking each click target with a hand-drawn outline and a numbered badge in the BeForth look. Asks whether the person wants the whole software or only specific features, works one module at a time, saves progress to disk so work is never repeated, and reuses screenshots and common steps like login, search and pagination. Use this whenever the user asks for a user guide, user manual, help documentation, how-to guide, training material, onboarding walkthrough, feature guide, or "where to click" documentation for a web app, ERP, CRM, dashboard or admin panel, even if they never say "PDF" or "screenshots".
 ---
 
 # User guide builder

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resumable progress tracking for user-guide-builder.
+"""Resumable progress tracking for docyfy.
 
 The workspace holds state.json. Agents run `status` (a few lines) instead of
 re-reading files, which keeps token use low and prevents repeated work.

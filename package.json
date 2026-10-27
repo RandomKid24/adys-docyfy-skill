@@ -1,8 +1,8 @@
 {
-  "name": "adys-docyfy-skill",
+  "name": "docyfy",
   "version": "1.0.0",
-  "description": "Installs the user-guide-builder skill into the AI tools on your machine",
-  "bin": { "adys-docyfy-skill": "bin/install.js" },
+  "description": "Installs the docyfy skill into the AI tools on your machine",
+  "bin": { "docyfy": "bin/install.js" },
   "files": ["bin", "SKILL.md", "README.md", "requirements.txt", "assets", "references", "scripts"],
   "engines": { "node": ">=16" },
   "license": "MIT",
