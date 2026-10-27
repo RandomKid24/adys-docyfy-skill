@@ -835,7 +835,22 @@ def cmd_voices(a):
         print("edge-tts did not work (not installed or no internet), so a fallback voice was used where one existed.")
 
 
+def use_skill_python():
+    """If the installer left a .python file (its virtualenv), run under that interpreter, so
+    `python3 capture.py ...` finds Playwright and edge-tts even when the system Python lacks them."""
+    f = os.path.join(HERE, "..", ".python")
+    try:
+        want = open(f).read().strip()
+    except OSError:
+        return
+    if want and os.path.exists(want) and not os.environ.get("DOCYFY_REEXEC") \
+            and os.path.realpath(want) != os.path.realpath(sys.executable):
+        os.environ["DOCYFY_REEXEC"] = "1"
+        os.execv(want, [want] + sys.argv)
+
+
 def main():
+    use_skill_python()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("login"); s.add_argument("--url", required=True); s.add_argument("--out", required=True); s.set_defaults(f=cmd_login)
