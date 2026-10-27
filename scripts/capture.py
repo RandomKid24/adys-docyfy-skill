@@ -22,6 +22,8 @@ a click and no marks highlights the click target. "shot": true forces a picture.
 (names, phones, amounts). Marks are numbered 1, 2, 3 in order.
 Highlight in the video: "highlight": "auto" (default) shows only the caption when the cursor points at a click, fill
 or select target, and a soft ring (no dim) on look-only steps. "full" always spotlights with a number, "caption" never.
+Look of the video: a title card and an end card ("cards": false removes them), a "Step 2 of 4" chip in the
+caption, and a smooth zoom toward each click target ("zoom": false removes it, "zoom_level": 1.3 sets how much).
 Voice: add "voice": true (or {"name": "Rishi", "rate": 170}) to the spec header and each step's text is read
 aloud, Frappe style. The MP4 carries the voice, the GIF stays silent. Uses macOS `say` (default voice Rishi),
 else espeak-ng. Set DOCYFY_TTS_CMD='mytts "{text}" {out}' to use another engine.
@@ -70,7 +72,7 @@ def box_of(page, target):
     return [round(b["x"]), round(b["y"]), round(b["width"]), round(b["height"])]
 
 
-OVERLAY_JS = """([boxes, caption, accent, mode]) => {
+OVERLAY_JS = """([boxes, caption, accent, mode, label]) => {
   document.getElementById('__dy')?.remove();
   const root = document.createElement('div'); root.id = '__dy';
   root.style.cssText = 'position:fixed;inset:0;z-index:2147483646;pointer-events:none;font-family:system-ui,sans-serif;opacity:0;transition:opacity .28s ease';
@@ -89,7 +91,13 @@ OVERLAY_JS = """([boxes, caption, accent, mode]) => {
   });
   if (caption) {
     const c = document.createElement('div');
-    c.textContent = caption;
+    if (label) {
+      const chip = document.createElement('span');
+      chip.textContent = label;
+      chip.style.cssText = 'display:inline-block;margin-right:12px;padding:2px 9px;background:' + accent + ';color:#fff;font:800 13px/1.5 system-ui;letter-spacing:.04em;text-transform:uppercase;vertical-align:2px';
+      c.appendChild(chip);
+    }
+    c.appendChild(document.createTextNode(caption));
     c.style.cssText = 'position:absolute;left:50%;bottom:28px;transform:translateX(-50%);max-width:70%;background:#231F20;color:#F2F7F9;' +
       'padding:12px 20px;font:600 18px/1.35 system-ui;border-left:5px solid ' + accent;
     root.appendChild(c);
@@ -269,7 +277,77 @@ def probe(path):
     return int(w), int(h)
 
 
-def to_gif(webm, out_gif, out_mp4, title="", framed=True, clips=None):
+
+def sm(a):
+    c = f"clip({a},0,1)"
+    return f"({c}*{c}*(3-2*{c}))"
+
+
+def zoom_expr(zooms, w, h, zmax, ramp=0.55, fps=25):
+    """zoompan expressions: ease in toward each target, hold, ease out. zooms = [(t_in, t_out, cx, cy)] in seconds and video px."""
+    T = f"(on/{fps})"
+    bumps = [f"({sm(f'(({T}-{a})/{ramp})')}-{sm(f'(({T}-{b})/{ramp})')})" for a, b, _, _ in zooms]
+    z = "1+" + f"({zmax}-1)*min(1," + "+".join(bumps) + ")" if bumps else "1"
+    cx = f"{w}/2+" + "+".join(f"{bp}*({c[2]}-{w}/2)" for bp, c in zip(bumps, zooms)) if bumps else f"{w}/2"
+    cy = f"{h}/2+" + "+".join(f"{bp}*({c[3]}-{h}/2)" for bp, c in zip(bumps, zooms)) if bumps else f"{h}/2"
+    return z, f"clip({cx}-iw/zoom/2,0,iw-iw/zoom)", f"clip({cy}-ih/zoom/2,0,ih-ih/zoom)"
+
+
+def make_card(out_dir, name, size, headline, sub, accent, kicker):
+    """Title or end card in the BeForth look: paper background, ink headline, accent bar."""
+    from PIL import Image, ImageDraw, ImageFont
+    import theme
+    W, H = size
+    img = Image.new("RGB", (W, H), theme.hex_rgb(theme.PALETTE["paper"]))
+    d = ImageDraw.Draw(img)
+    big = ImageFont.truetype(theme.font_path("bold"), int(H * 0.075))
+    mid = ImageFont.truetype(theme.font_path("regular"), int(H * 0.034))
+    small = ImageFont.truetype(theme.font_path("semibold"), int(H * 0.026))
+    x = int(W * 0.1)
+    words, lines, cur = headline.split(), [], ""
+    for wd in words:
+        t = (cur + " " + wd).strip()
+        if d.textlength(t, font=big) > W * 0.8 and cur:
+            lines.append(cur); cur = wd
+        else:
+            cur = t
+    lines.append(cur)
+    lh = int(H * 0.095)
+    y = int(H * 0.5 - (len(lines) * lh) / 2 - H * 0.03)
+    d.rectangle([x, y - int(H * 0.09), x + int(W * 0.06), y - int(H * 0.09) + 8], fill=theme.hex_rgb(accent))
+    d.text((x, y - int(H * 0.075)), kicker.upper(), font=small, fill=theme.hex_rgb(accent))
+    for ln in lines:
+        d.text((x, y), ln, font=big, fill=theme.hex_rgb(theme.PALETTE["ink"]))
+        y += lh
+    d.text((x, y + int(H * 0.02)), sub, font=mid, fill=theme.hex_rgb(theme.PALETTE["ash"]))
+    path = os.path.join(out_dir, name)
+    img.save(path)
+    return path
+
+
+def add_cards(mp4, cards, size, has_audio):
+    """Second pass: title card, then the recording, then an end card. Measures the real length of the
+    recording so nothing is cut."""
+    (ip, idur), (op, odur) = cards
+    mdur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp4],
+                                capture_output=True, text=True).stdout.strip() or 0)
+    tmp = mp4 + ".tmp.mp4"
+    W, H = size
+    g = (f"[0:v]scale={W}:{H},setsar=1,fps=25,format=yuv420p[ci];[1:v]scale={W}:{H},setsar=1,fps=25,format=yuv420p[cm];"
+         f"[2:v]scale={W}:{H},setsar=1,fps=25,format=yuv420p[co];[ci][cm][co]concat=n=3:v=1:a=0[v]")
+    args = ["-map", "[v]"]
+    if has_audio:
+        ms = int(idur * 1000)
+        g += f";[1:a]adelay={ms}|{ms},apad[a]"
+        args += ["-map", "[a]", "-c:a", "aac", "-b:a", "128k"]
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-framerate", "25", "-t", str(idur), "-i", ip, "-i", mp4,
+           "-loop", "1", "-framerate", "25", "-t", str(odur), "-i", op, "-filter_complex", g, *args,
+           "-t", f"{idur + mdur + odur:.2f}", "-c:v", "libx264", "-crf", "20", "-movflags", "+faststart", tmp]
+    if subprocess.run(cmd, check=False).returncode == 0 and os.path.exists(tmp):
+        os.replace(tmp, mp4)
+
+
+def to_gif(webm, out_gif, out_mp4, title="", framed=True, clips=None, zooms=None, zmax=1.3, cards=None):
     """MP4 and GIF from the raw recording. Framed puts it in a window (title bar, rounded corners,
     shadow) on a soft backdrop, so it looks like a polished screen recording."""
     if not shutil.which("ffmpeg"):
@@ -281,12 +359,18 @@ def to_gif(webm, out_gif, out_mp4, title="", framed=True, clips=None):
         bgp, mp, (x, y), (cw, ch) = make_frame(work, w, h, title)
         dur = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", webm],
                              capture_output=True, text=True).stdout.strip() or "30"
-        graph = (f"[0:v]scale={w}:{h},format=rgba[v];[2:v]format=gray[m];[v][m]alphamerge[vm];"
+        zf = f"scale={w}:{h}"
+        if zooms:
+            z, zx, zy = zoom_expr(zooms, w * 2, h * 2, zmax)
+            zf = f"scale={w * 2}:{h * 2}:flags=lanczos,zoompan=z='{z}':x='{zx}':y='{zy}':d=1:s={w}x{h}:fps=25"
+        graph = (f"[0:v]{zf},format=rgba[v];[2:v]format=gray[m];[v][m]alphamerge[vm];"
                  f"[1:v][vm]overlay={x}:{y}:format=auto:shortest=1,format=yuv420p[out]")
+        final_size = (cw, ch)
         inputs = ["-i", webm, "-loop", "1", "-framerate", "25", "-i", bgp, "-loop", "1", "-framerate", "25", "-i", mp]
         first_audio = 3
     else:
         graph = "[0:v]format=yuv420p[out]"
+        final_size = probe(webm)
         dur = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", webm],
                              capture_output=True, text=True).stdout.strip() or "30"
         inputs = ["-i", webm]
@@ -300,9 +384,11 @@ def to_gif(webm, out_gif, out_mp4, title="", framed=True, clips=None):
         mix = "".join(f"[a{k}]" for k in range(len(clips))) + (f"amix=inputs={len(clips)}:normalize=0:duration=longest[aout]" if len(clips) > 1 else "anull[aout]")
         graph += ";" + ";".join(parts) + ";" + mix
         audio_args = ["-map", "[aout]", "-c:a", "aac", "-b:a", "128k"]
-    mapping = ["-filter_complex", graph, "-map", "[out]", *audio_args, "-t", dur]
+    mapping = ["-filter_complex", graph, "-map", "[out]", *audio_args, "-t", str(dur)]
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *inputs, *mapping, "-c:v", "libx264", "-crf", "20",
                     "-movflags", "+faststart", out_mp4], check=False)
+    if cards and os.path.exists(out_mp4):
+        add_cards(out_mp4, cards, final_size, bool(clips))
     pal = out_gif + ".png"
     vf = "fps=15,scale=900:-1:flags=lanczos"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", out_mp4, "-vf", vf + ",palettegen=stats_mode=diff", pal], check=False)
@@ -331,6 +417,8 @@ def run_task(p, spec, ws, task, video, accent):
     voice = spec.get("voice")
     vname = voice.get("name") if isinstance(voice, dict) else None
     vrate = int(voice.get("rate", 170)) if isinstance(voice, dict) else 170
+    zooms, zin = [], None
+    vid_sc = min(vw, 1280) / vw
     clips, t0 = [], time.time()     # narration clips with their start time in the recording
     for i, st in enumerate(task["steps"], 1):
         if "goto" in st:
@@ -380,12 +468,16 @@ def run_task(p, spec, ws, task, video, accent):
             if boxes:
                 hl = spec.get("highlight", "auto")
                 mode = hl if hl in ("full", "caption") else ("caption" if tgt else "ring")
-                page.evaluate(OVERLAY_JS, [boxes, plain(st["text"]), accent, mode])
+                page.evaluate(OVERLAY_JS, [boxes, plain(st["text"]), accent, mode, f"Step {i} of {len(task['steps'])}" if len(task['steps']) > 1 else ""])
             if audio:
                 clips.append((audio, int((time.time() - t0) * 1000) + 150))
             if boxes or audio:
                 page.wait_for_timeout(read_ms)   # time to read the caption, or to hear it
             if tx is not None and action:
+                if spec.get("zoom", True) and boxes:
+                    page.evaluate("(() => { const o = document.getElementById('__dy'); if (o) o.style.opacity = 0; })()")
+                    page.wait_for_timeout(300)
+                    zin = (time.time() - t0) + 0.15
                 page.evaluate(MOVE_JS, [tx, ty])
                 page.wait_for_timeout(750)                                  # cursor glides to the target
                 page.evaluate(RIPPLE_JS, [tx, ty, accent]) if action == "click" else None
@@ -413,6 +505,9 @@ def run_task(p, spec, ws, task, video, accent):
                 page.wait_for_load_state("networkidle", timeout=4000)
             except Exception:
                 pass
+        if video and zin is not None:
+            zooms.append((round(zin, 2), round((time.time() - t0) + 0.15 + 0.35, 2), round(tx * vid_sc, 1), round(ty * vid_sc, 1)))
+            zin = None
         if video:
             page.evaluate("(() => { const o = document.getElementById('__dy'); if (o) o.style.opacity = 0; })()")
             page.wait_for_timeout(600 if not boxes else 450)
@@ -429,8 +524,17 @@ def run_task(p, spec, ws, task, video, accent):
     ctx.close()
     br.close()
     if video and vpath and os.path.exists(vpath):
+        cards = None
+        if spec.get("cards", True) and shutil.which("ffmpeg"):
+            vwid = min(vw, 1280)
+            cw_, ch_ = vwid + 140, int(vwid * vh / vw) + 44 + 140
+            cw_, ch_ = (cw_ - cw_ % 2, ch_ - ch_ % 2) if spec.get("frame", True) else (vwid, int(vwid * vh / vw))
+            app = spec.get("app") or "User guide"
+            cards = ((make_card(tmp, "intro.png", (cw_, ch_), task["title"], task.get("goal") or "", accent, app), 2.2),
+                     (make_card(tmp, "outro.png", (cw_, ch_), "That is it. You are done.", "More tasks are in the full guide.", accent, app), 1.8))
         g = to_gif(vpath, os.path.join(gifs, f"{slug}.gif"), os.path.join(gifs, f"{slug}.mp4"),
-                   title=spec.get("app") or task["title"], framed=spec.get("frame", True), clips=clips)
+                   title=spec.get("app") or task["title"], framed=spec.get("frame", True), clips=clips,
+                   zooms=zooms if spec.get("zoom", True) else None, zmax=float(spec.get("zoom_level", 1.3)), cards=cards)
         if g:
             feat["gif"] = os.path.relpath(g, ws)
     shutil.rmtree(tmp, ignore_errors=True)

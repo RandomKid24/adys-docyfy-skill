@@ -152,3 +152,7 @@ Add `"voice": true` to the capture spec and each step is read aloud, like the Fr
 ### Highlights in videos
 
 The cursor already shows where to click, so videos skip the dim and the numbered disc on click, fill and select steps. You get the caption and the cursor. Look-only steps ("you see the confirmation") get a soft ring. Set `"highlight": "full"` in the capture spec for the spotlight look, or `"caption"` for captions only. PDFs and screenshots keep the spotlight, since they have no cursor.
+
+### What a finished video has
+
+A title card with the task name and goal, then the recording in a Mac-style window. The view eases in toward each click target and back out, the cursor glides and ripples on the click, and the caption carries a "Step 2 of 4" chip. An end card closes it. The voice track, if on, starts after the title card. Turn pieces off in the spec with `"cards": false`, `"zoom": false` or `"highlight": "caption"`. `"zoom_level": 1.3` sets how close it gets.
