@@ -59,6 +59,17 @@ Repeat for each pending module. Do not hold more than one module in working memo
 9. **Self-check by eye.** Run `review_pages.py --ws W --module S`. It writes one contact-sheet image of every page. Open that one image (not each page) and go through the checklist it prints: outline on the right element, badges not cut off, nothing readable that should be blurred, no blurry pictures. If a page looks wrong, run `review_pages.py ... --page N` to see just that page at full size, fix the JSON or retake the shot, rebuild and look again. Only then run `progress.py set --ws W --module S --status built`.
 10. Move on. Do not re-read earlier modules.
 
+## Fast capture (use this first when it can reach the app)
+`scripts/capture.py` drives the installed Google Chrome through Playwright on the same machine Claude's shell runs on. Pictures come out 2x sharp (2880 px for a 1440 px window), boxes are measured exactly, and an edited recording (spotlight, numbered mark, caption bar) is made while it runs, as a GIF and an MP4 in `gifs/`. It needs no round trip to Claude per click, so a task takes seconds instead of minutes. Use it when the app address opens from this machine (localhost, or a staging or demo link) and Playwright is installed (`<python> -c "import playwright"`). Otherwise use the browser-tool capture in Step 3 and `references/capture.md`.
+
+1. **Sign in once, by the person.** If the app needs a login, ask them to run `<python> <skill-dir>/scripts/capture.py login --url <app url> --out <ws>/.auth/state.json` in their own terminal, sign in in the window that opens, and close it. Never type or ask for their password yourself. The saved state stays in `<ws>/.auth` and is never part of the guide.
+2. **Look at pages as text, not pictures.** `capture.py explore --url <page> [--state <ws>/.auth/state.json]` prints every visible button, link and field as `role=button[name="Punch in"]`. Those are the targets for the spec. This costs a few lines per page instead of an image.
+3. **Write one spec** (`<ws>/spec.json`, format in the header of `capture.py`): each task has steps with `text`, an optional `goto`, then one action (`click`, `fill`, `select`, `press`, `wait`). Marks and the picture are taken before the action. A click step with no marks highlights the click target. Use `blur` for names, phones and amounts. Add `before`, `fields` and `goal` per task.
+4. **Run it**: `capture.py run --ws W --spec spec.json` (add `--only <slug>` for one task, `--no-video` to skip recordings). It writes `shots/`, `gifs/` and the module JSON (default module `tasks`, or set `"module"` in the spec).
+5. **Continue as normal**: `check_boxes.py`, `annotate.py`, `build_pdf.py module`, `review_pages.py`, then the front pages and final build. The picture, GIF and PDF all show the same steps.
+
+Rules it enforces: `"env": "production"` is look-only, so click, fill, select and press are refused. It never types into a password field. Use sample data in `fill` values. If a step cannot be found within 8 seconds, it stops and names the step. Fix the target (rerun `explore` on that page) instead of guessing. If the app uses single sign-on, a captcha or a code sent by phone, the login command still works because the person does it by hand.
+
 ## Step 4. Front pages, check, assemble, deliver
 
 1. **Quick start.** Once all modules are built, write a short `quick-start` module so a new user is not facing 40 pages cold. `progress.py add-module --ws W --slug quick-start --title "Start here"`, write `modules/quick-start.json`, build it like any module. It has an `intro` of two sentences, a `cheatsheet` ("I want to..." and where to go, 6 to 10 rows covering the most common jobs), and one feature, "Your first five minutes": sign in (`common: login`), find your way around (`common: sidebar`), then the two or three tasks people do daily. Reuse existing annotated images by setting `"annotated": "annotated/<file>.jpg"` on a step instead of capturing again. Keep it to one or two pages.
@@ -83,7 +94,7 @@ The reader is a shop clerk or accountant, not a developer. Every choice below se
 - Real client data is blurred. Sample data is obviously sample ("Sample Traders", 9999999999).
 
 ## Fast mode
-Most of the time goes into driving the browser, not into the scripts. Ways to cut it, in order of payoff:
+The biggest win is `capture.py` (see Fast capture above), which removes the browser round trips. When it cannot reach the app and the browser tools are the only way, most of the time goes into driving the browser. Ways to cut it, in order of payoff:
 1. **Ask for scope.** Offer "main screens only": one screenshot per feature (the screen with its target marked) instead of one per click. Steps like "type your name" or "scroll down" need no picture. This alone halves the capture time.
 2. **Measure in one call.** For each screen, run one `javascript_tool` call that returns the boxes of every target at once. Do not hunt for elements with several `find` calls.
 3. **Batch the clicks.** When the steps for a screen are known, use `browser_batch` to click and screenshot in one round trip.

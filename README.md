@@ -89,6 +89,17 @@ You can ask for step-by-step guides for particular tasks instead of the whole ap
 
 Each task becomes its own section. It starts at the screen the reader sees first and ends at the confirmation message. Every step has a screenshot with the target highlighted and a number, plus a "Before you start" box and a table of the fields. You can also get a one-page cheat sheet for the tasks you use most.
 
+## Fast capture, sharp pictures and edited recordings
+
+When the app opens from your computer (localhost, staging or a demo link), the skill runs `scripts/capture.py`. It drives the Google Chrome you already have, through Playwright (no extra browser download; if Chrome is missing the installer fetches Chromium), so:
+
+- Screenshots are 2x sharp (a 1440 px window gives a 2880 px picture), not the 800 px the built-in browser tool returns.
+- Highlight boxes are measured from the page, so they sit exactly on the target.
+- A recording is made as it runs, edited with a spotlight on the target, the step number and a caption bar. You get a GIF and an MP4 per task. Install `ffmpeg` for this (`brew install ffmpeg`).
+- A three-step task takes about 10 seconds.
+
+You sign in yourself, once, in a window the script opens. The skill never types your password. On production it only looks and never clicks.
+
 ## What it writes
 
 Everything goes in a workspace folder, so a stopped run picks up where it left off.

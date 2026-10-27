@@ -39,6 +39,7 @@ if (has("-h") || has("--help")) {
   --list            show what was found, install nothing
   --uninstall       remove the skill from the places it is installed
   --no-deps         skip creating the Python virtualenv
+  --no-browser      skip downloading Chromium for fast capture
 `);
   process.exit(0);
 }
@@ -142,10 +143,24 @@ function pythonDeps() {
         if (fs.existsSync(d)) fs.writeFileSync(path.join(d, ".python"), vp + "\n");
       }
       console.log(`Python ready: ${vp}`);
+      const chromeAt = [
+        "/Applications/Google Chrome.app", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+        path.join(home, "AppData", "Local", "Google", "Chrome", "Application", "chrome.exe"),
+      ].some((p) => fs.existsSync(p));
+      if (chromeAt) console.log("Google Chrome found. Fast capture will use it, so no browser download is needed.");
+      if (!chromeAt && !has("--no-browser")) {
+        console.log("\nInstalling the Chromium browser for fast capture (about 150 MB, once)...");
+        const b = spawnSync(vp, ["-m", "playwright", "install", "chromium"], { stdio: "inherit" });
+        if (b.status !== 0) console.log("Chromium did not install. Fast capture will be off. Retry: " + vp + " -m playwright install chromium");
+      }
+      if (spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status !== 0)
+        console.log("Optional: install ffmpeg (brew install ffmpeg) to get GIF and MP4 recordings.");
     } else {
       console.log("Packages not installed. Fix the error above and run the installer again.");
     }
   }
   console.log(`\nDone. Restart your AI tool, then ask it: "make a user guide for my app at http://localhost:3000".
-You also need the Claude in Chrome extension for screenshots.`);
+For apps that need a login or are not reachable from this computer, the Claude in Chrome extension is the fallback for screenshots.`);
 })();
