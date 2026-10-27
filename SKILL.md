@@ -14,6 +14,21 @@ Read `references/look.md` only when asked to change how the guide looks (colours
 
 If a workspace already exists (the user names one, or `guide-workspace/*/state.json` is present), run `progress.py status --ws <dir>`. If every module is built and the user says the app changed, use Update mode below. Otherwise continue from the first unfinished module. Do not re-ask scope questions that `state.json` already answers.
 
+## What to make (words after /docyfy)
+Read any words after the command and skip asking about extras when they cover it. A task name or module name in the words sets the scope too, for example `/docyfy video punch-in`.
+
+| Words | Makes | How |
+|---|---|---|
+| `pdf` | PDF with cheat sheets | capture with `--no-video`, skip recordings |
+| `video` | MP4 and GIF recordings only | capture with video, skip `build_pdf.py` |
+| `word` | Word file | add `build_docx.py` |
+| `site` | searchable help site | add `build_site.py` |
+| `all` | PDF, Word, site, cheat sheets and videos | everything above |
+| `draft`, `1080p`, `4k`, `8k` | video quality (default `4k`) | `quality` in the spec |
+| `voice` | narrated MP4 | `"voice": true` in the spec |
+
+Words can be combined, `/docyfy pdf video`. With no words, ask what to make in the intake. Say in one line what you will make before starting.
+
 ## Step 1. Intake (ask once, with AskUserQuestion, then stop asking)
 
 Ask these together in one call:
@@ -25,7 +40,7 @@ Ask these together in one call:
    - **Production.** Only if nothing else exists, and then strictly read-only (look, never change) with real data blurred. Say plainly that a staging or demo copy would give a better guide, and ask once if they can set one up.
 
    Sign-in: on a local or staging copy, use the test username and password the user types in chat for that app, or ones from the project's seed or example-config files. Do not repeat them back in replies. On production, or on any site the user has not said is a test copy, ask the user to sign in themselves in the Chrome tab and continue from there. Never type real passwords or payment details.
-3. **Extras**: GIFs for features, or screenshots only? (GIFs make a companion folder and an HTML page, since PDF cannot play animation.) Also an editable Word version (useful when the client wants to change wording), and a help website (searchable, can be hosted, gives the app's "?" buttons links straight to the right section)?
+3. **Extras** (skip if the words after the command already say): GIFs for features, or screenshots only? (GIFs make a companion folder and an HTML page, since PDF cannot play animation.) Also an editable Word version (useful when the client wants to change wording), and a help website (searchable, can be hosted, gives the app's "?" buttons links straight to the right section)?
 4. **Audience and language**: for example "shop staff, plain English". It sets the tone of the step text.
 5. **Branding and privacy**: accent colour (hex) and logo file for the cover, if they have them. Confirm that real customer data on screen should be blurred (default yes).
 6. **Safe to click?** On a local or staging copy, creating, editing and deleting test records is fine, so document full flows end to end (fill the form, click Save, show the success message), using obvious sample data like "Sample Customer". On production, look at everything and change nothing. On production, create and delete steps are documented by stopping before the final confirm click.

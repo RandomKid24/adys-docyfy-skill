@@ -160,3 +160,9 @@ A title card with the task name and goal, then the recording in a Mac-style wind
 ### Video quality
 
 Videos come from a studio renderer. It takes sharp stills of every page state, then draws the cursor, zoom, captions, click ripples and fades itself at 60 frames per second. That gives true 4K and perfectly even motion, which a live screen recording cannot. Set `"quality"` in the capture spec to `"4k"` (default), `"1080p"`, `"draft"` (1080p at 30 fps, renders in seconds, good for checking) or `"8k"` (slow, large files). `"engine": "live"` switches back to recording the browser as it runs. Rendering 4K takes a few minutes per task on a laptop, so use `draft` first and `4k` for the final pass.
+
+### Choose what to make
+
+Add words after the command. `/docyfy pdf` makes the PDF only. `/docyfy video` makes the recordings only. `/docyfy all` makes everything: PDF, Word file, help site, cheat sheets and videos. You can combine them (`/docyfy pdf video`), name a task or module (`/docyfy video punch-in`), and set video quality (`draft`, `1080p`, `4k`, `8k`) or add `voice`. With no words, it asks.
+
+To pick up updates on your computer, run `npx github:RandomKid24/adys-docyfy-skill` again.
