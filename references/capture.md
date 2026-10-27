@@ -7,7 +7,11 @@ Open the app in a fresh tab. Keep the same tab and window size for the whole pro
 
 ## Token rules
 
-- Any screenshot that goes into the guide (`save_to_disk: true`) is taken at `scale: 1` with the window about 1440 px wide, so text stays sharp when printed. Only throwaway looks, which you do not save, may use `scale: 0.4` to 0.6. Crops are made later from the full-size file, so never pre-crop or shrink it.
+- **Sharp pictures need a 1:1 screenshot.** Every tool reports the picture size ("Screenshot size: 800x639"). The picture should be about as wide as the page's own width in CSS px (`innerWidth`). If the picture is half the page width, the text prints soft, and no later step can fix that.
+  - Built-in browser: screenshots are capped at 800 px wide, whatever the window size (a 1440 px window gives a picture 55% of its real size). So set the window to about 800 px wide first (`resize_window` width 800, height 640 to 900) and write `"viewport": [800, <height>]` in the module JSON. Zoom only crops, it does not add detail. The tool result prints the saved file as `[Image: source: /path/file.jpg]`. Copy that file into `shots/` (`cp` it). Reset the window with preset `desktop` at the end.
+  - If the app collapses to a phone or tablet layout at 800 px, capture at the wider size with Claude in Chrome instead, or accept a softer picture and say so to the person.
+  - Claude in Chrome: use `save_to_disk: true` at `scale: 1` and check the reported size against `innerWidth` the same way.
+  - Only throwaway looks, which you do not save, may use a low `scale`. Crops are made later from the saved file, so never pre-crop or shrink it.
 - Add `save_to_disk: true` only on the shot you will actually keep. Rename or move the saved file into `<ws>/shots/<name>.png` (the tool result gives the path).
 - Find targets with `find` or `read_page` (`filter: interactive`, `ref_id` to narrow). Do not scan whole pages in `all` mode.
 - Measure many targets in one call:

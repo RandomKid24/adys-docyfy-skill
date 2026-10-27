@@ -22,7 +22,7 @@ try:
 except ImportError:
     sys.exit("python-docx is missing: pip install --break-system-packages python-docx")
 from PIL import Image
-from build_pdf import accent_hex, load_common, load_state, resolve_step, step_image
+from build_pdf import accent_hex, before_lines, load_common, load_state, resolve_step, step_image
 from diagram import flow_png
 
 BOLD = re.compile(r"\*\*(.+?)\*\*")
@@ -211,6 +211,9 @@ def build(ws):
                 r = p.add_run(f"Animated version: {feat['gif']} (see final/guide.html)")
                 r.font.size = Pt(9)
                 r.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
+            bl = before_lines(feat)
+            if bl:
+                callout(doc, "Before you start.", "  ".join(f"{a}: {b}." if not b.endswith(".") else f"{a}: {b}" for a, b in bl), "D6E7F1", accent_hex)
             for i, step in enumerate((resolve_step(x, common, ws, state) for x in feat.get("steps", [])), 1):
                 p = doc.add_paragraph()
                 p.paragraph_format.keep_with_next = True

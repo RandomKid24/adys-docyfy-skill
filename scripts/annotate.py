@@ -471,8 +471,10 @@ def run_module(ws, slug):
                 continue
             try:
                 with Image.open(src) as _im:
-                    if _im.width < 1100:
-                        print(f"WARN {step_img}: only {_im.width}px wide, it will print soft. Retake it with scale 1 in a ~1440px window.", file=sys.stderr)
+                    ratio = _im.width / viewport[0] if viewport else 1.0
+                    if ratio < 0.85:
+                        print(f"WARN {step_img}: picture is {_im.width}px for a {viewport[0]}px wide page ({ratio:.0%}), so text will print soft. "
+                              f"Make the browser window about as wide as the picture the tool returns (the built-in browser caps screenshots at 800px), or use Claude in Chrome.", file=sys.stderr)
             except Exception:
                 pass
             marks, crop = step.get("marks", []), step.get("crop")

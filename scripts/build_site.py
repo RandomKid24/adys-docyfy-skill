@@ -20,7 +20,7 @@ import argparse, hashlib, html, json, os, re, shutil, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import theme
-from build_pdf import accent_hex, apply_brand, load_common, load_state, md, resolve_step, step_image
+from build_pdf import accent_hex, apply_brand, before_lines, load_common, load_state, md, resolve_step, step_image
 from diagram import flow_png
 
 CSS = """
@@ -187,6 +187,10 @@ class Site:
                 g = self.asset(feat["gif"])
                 if g:
                     body.append(f"<p><img loading=lazy src='{g}' alt='Animated walkthrough of {html.escape(feat['title'])}'></p>")
+            bl = before_lines(feat)
+            if bl:
+                body.append("<div class=tip><b>Before you start</b><br>" + "<br>".join(f"<b>{html.escape(a)}:</b> {md(b)}" for a, b in bl) + "</div>")
+                texts += " " + " ".join(plain(b) for _, b in bl)
             body.append(steps_html)
             if feat.get("fields"):
                 body.append("<h3>Fields on this screen</h3><table class=t><tr><th>Field<th>Required?<th>What to enter<th>Example</tr>" + "".join(

@@ -190,6 +190,33 @@ def fields_table(fields):
     return t
 
 
+def before_lines(feat):
+    """Rows for the 'Before you start' box: [(label, text)]. Empty when the feature has none."""
+    b = feat.get("before") or {}
+    rows = []
+    if b.get("menu"):
+        rows.append(("Where", b["menu"]))
+    if b.get("role"):
+        rows.append(("Who can do this", b["role"]))
+    if b.get("ready"):
+        rows.append(("Have ready", ", ".join(b["ready"]) if isinstance(b["ready"], list) else b["ready"]))
+    return rows
+
+
+def before_box(feat):
+    rows = before_lines(feat)
+    if not rows:
+        return []
+    data = [[Paragraph("<b>Before you start</b>", S["tip"]), ""]] + [
+        [Paragraph(f"<b>{html.escape(a)}</b>", S["tip"]), Paragraph(md(b), S["tip"])] for a, b in rows]
+    t = Table(data, colWidths=[34 * mm, FRAME_W - 34 * mm])
+    t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), TIP_BG), ("LINEBEFORE", (0, 0), (0, -1), 3, ACCENT),
+                           ("SPAN", (0, 0), (1, 0)), ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                           ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                           ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    return [t, Spacer(1, 3 * mm)]
+
+
 def feature_fields(feat):
     if not feat.get("fields"):
         return []
@@ -272,6 +299,7 @@ def build_module(ws, slug, force=False):
         if feat.get("gif"):
             head.append(Paragraph(f'Animated version: {html.escape(feat["gif"])} (open final/guide.html)', S["muted"]))
         head.append(Spacer(1, 2 * mm))
+        head += before_box(feat)
         steps = [resolve_step(s, common, ws, state) for s in feat.get("steps", [])]
         if not steps:
             story += head + feature_fields(feat)
@@ -473,6 +501,9 @@ def build_html(ws, state, ready):
                 parts.append(f"<p>{html.escape(feat['goal'])}</p>")
             if feat.get("gif") and os.path.exists(os.path.join(ws, feat["gif"])):
                 parts.append(f"<p><img src='../{html.escape(feat['gif'])}' alt='animated walkthrough'></p>")
+            bl = before_lines(feat)
+            if bl:
+                parts.append("<div class=tip><b>Before you start</b><br>" + "<br>".join(f"<b>{html.escape(a)}:</b> {md(b)}" for a, b in bl) + "</div>")
             parts.append("<ol>")
             for i, st in enumerate(feat.get("steps", []), 1):
                 st = resolve_step(st, common, ws, state)

@@ -46,6 +46,12 @@ def texts_of(mod):
             for key in ("text", "tip", "warning"):
                 if st.get(key):
                     yield f"{fi}.{si} {key}", st[key]
+        b_ = feat.get("before") or {}
+        for key in ("menu", "role"):
+            if b_.get(key):
+                yield f"{fi} before {key}", b_[key]
+        for item in (b_.get("ready") if isinstance(b_.get("ready"), list) else [b_.get("ready")] if b_.get("ready") else []):
+            yield f"{fi} before ready", item
         for f_ in feat.get("fields", []):
             for key in ("help", "example"):
                 if f_.get(key):
@@ -114,6 +120,8 @@ def main():
                 err(where, "feature has no steps")
             if len(steps) > 12:
                 warn(where, f"{len(steps)} steps; readers lose their place past about 12, so split it")
+            if (feat.get("fields") or len(steps) >= 4) and not feat.get("before"):
+                warn(where, "no `before` box (where it is in the menu, who can do it, what to have ready); forms and long tasks need one")
             if feat.get("gif") and not os.path.exists(os.path.join(a.ws, feat["gif"])):
                 warn(where, f"GIF {feat['gif']} not found; the HTML page will skip it")
             for si, st in enumerate(steps):
