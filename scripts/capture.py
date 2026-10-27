@@ -20,6 +20,9 @@ A step: optional "goto"; its marks (targets to highlight) and picture are taken 
 action: click | fill [target, value] | select [target, value] | press key | wait (ms or selector). A step with
 a click and no marks highlights the click target. "shot": true forces a picture. "blur": [targets] pixelates
 (names, phones, amounts). Marks are numbered 1, 2, 3 in order.
+Voice: add "voice": true (or {"name": "Rishi", "rate": 170}) to the spec header and each step's text is read
+aloud, Frappe style. The MP4 carries the voice, the GIF stays silent. Uses macOS `say` (default voice Rishi),
+else espeak-ng. Set DOCYFY_TTS_CMD='mytts "{text}" {out}' to use another engine.
 Safety: production is look-only (no click, fill, select, press). Password fields are never filled: sign in with
 the login command instead. Use sample data in fill values.
 """
@@ -113,6 +116,38 @@ RIPPLE_JS = """([x, y, accent]) => {
   requestAnimationFrame(() => { r.style.transform = 'scale(4)'; r.style.opacity = 0; });
   setTimeout(() => r.remove(), 600);
 }"""
+
+
+def speak(text, out_base, voice=None, rate=170):
+    """Turn a sentence into a sound file with the computer's own voice. macOS `say` (the Indian English
+    voice Rishi when available), then espeak-ng or espeak. DOCYFY_TTS_CMD can override it:
+    a command with {text} and {out}. Returns the file path, or None when no voice is available."""
+    out = out_base + ".wav"
+    custom = os.environ.get("DOCYFY_TTS_CMD")
+    try:
+        if custom:
+            subprocess.run(custom.format(text=text.replace('"', ""), out=out), shell=True, check=True, capture_output=True)
+        elif shutil.which("say"):
+            out = out_base + ".aiff"
+            for v in ([voice] if voice else ["Rishi", None]):
+                cmd = ["say", "-r", str(rate), "-o", out] + (["-v", v] if v else []) + [text]
+                if subprocess.run(cmd, capture_output=True).returncode == 0:
+                    break
+        elif shutil.which("espeak-ng") or shutil.which("espeak"):
+            subprocess.run([shutil.which("espeak-ng") or shutil.which("espeak"), "-s", str(rate), "-w", out, text], check=True, capture_output=True)
+        else:
+            return None
+    except Exception:
+        return None
+    return out if os.path.exists(out) and os.path.getsize(out) > 500 else None
+
+
+def audio_len(path):
+    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path], capture_output=True, text=True)
+    try:
+        return float(r.stdout.strip())
+    except ValueError:
+        return 0.0
 
 
 def plain(text):
@@ -230,7 +265,7 @@ def probe(path):
     return int(w), int(h)
 
 
-def to_gif(webm, out_gif, out_mp4, title="", framed=True):
+def to_gif(webm, out_gif, out_mp4, title="", framed=True, clips=None):
     """MP4 and GIF from the raw recording. Framed puts it in a window (title bar, rounded corners,
     shadow) on a soft backdrop, so it looks like a polished screen recording."""
     if not shutil.which("ffmpeg"):
@@ -245,9 +280,23 @@ def to_gif(webm, out_gif, out_mp4, title="", framed=True):
         graph = (f"[0:v]scale={w}:{h},format=rgba[v];[2:v]format=gray[m];[v][m]alphamerge[vm];"
                  f"[1:v][vm]overlay={x}:{y}:format=auto:shortest=1,format=yuv420p[out]")
         inputs = ["-i", webm, "-loop", "1", "-framerate", "25", "-i", bgp, "-loop", "1", "-framerate", "25", "-i", mp]
-        mapping = ["-filter_complex", graph, "-map", "[out]", "-t", dur]
+        first_audio = 3
     else:
-        inputs, mapping = ["-i", webm], ["-vf", "format=yuv420p"]
+        graph = "[0:v]format=yuv420p[out]"
+        dur = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", webm],
+                             capture_output=True, text=True).stdout.strip() or "30"
+        inputs = ["-i", webm]
+        first_audio = 1
+    audio_args = []
+    if clips:
+        parts = []
+        for k, (path, ms) in enumerate(clips):
+            inputs += ["-i", path]
+            parts.append(f"[{first_audio + k}:a]adelay={ms}|{ms}[a{k}]")
+        mix = "".join(f"[a{k}]" for k in range(len(clips))) + (f"amix=inputs={len(clips)}:normalize=0:duration=longest[aout]" if len(clips) > 1 else "anull[aout]")
+        graph += ";" + ";".join(parts) + ";" + mix
+        audio_args = ["-map", "[aout]", "-c:a", "aac", "-b:a", "128k"]
+    mapping = ["-filter_complex", graph, "-map", "[out]", *audio_args, "-t", dur]
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *inputs, *mapping, "-c:v", "libx264", "-crf", "20",
                     "-movflags", "+faststart", out_mp4], check=False)
     pal = out_gif + ".png"
@@ -275,6 +324,10 @@ def run_task(p, spec, ws, task, video, accent):
     vw, vh = spec.get("viewport", [1440, 900])
     steps_out = []
     cur = [vw * 0.5, vh * 0.62]     # where the on-screen cursor is
+    voice = spec.get("voice")
+    vname = voice.get("name") if isinstance(voice, dict) else None
+    vrate = int(voice.get("rate", 170)) if isinstance(voice, dict) else 170
+    clips, t0 = [], time.time()     # narration clips with their start time in the recording
     for i, st in enumerate(task["steps"], 1):
         if "goto" in st:
             url = st["goto"] if st["goto"].startswith("http") else base + st["goto"]
@@ -315,9 +368,17 @@ def run_task(p, spec, ws, task, video, accent):
                 b = boxes[0] if tgt is None else (box_of(page, tgt) if tgt not in [m["target"] for m in marks_in] else boxes[[m["target"] for m in marks_in].index(tgt)])
                 tx, ty = b[0] + b[2] / 2, b[1] + b[3] / 2
             page.evaluate(CURSOR_JS, [cur[0], cur[1], accent])
+            audio, dsec = None, 0.0
+            if voice:
+                audio = speak(plain(st["text"]), os.path.join(tmp, f"voice{i}"), vname, vrate)
+                dsec = audio_len(audio) if audio else 0.0
+            read_ms = max(min(2600, 700 + 24 * len(plain(st["text"]))), int(dsec * 1000 + 350))
             if boxes:
                 page.evaluate(OVERLAY_JS, [boxes, plain(st["text"]), accent])
-                page.wait_for_timeout(min(2600, 700 + 24 * len(plain(st["text"]))))   # time to read the caption
+            if audio:
+                clips.append((audio, int((time.time() - t0) * 1000) + 150))
+            if boxes or audio:
+                page.wait_for_timeout(read_ms)   # time to read the caption, or to hear it
             if tx is not None and action:
                 page.evaluate(MOVE_JS, [tx, ty])
                 page.wait_for_timeout(750)                                  # cursor glides to the target
@@ -363,7 +424,7 @@ def run_task(p, spec, ws, task, video, accent):
     br.close()
     if video and vpath and os.path.exists(vpath):
         g = to_gif(vpath, os.path.join(gifs, f"{slug}.gif"), os.path.join(gifs, f"{slug}.mp4"),
-                   title=spec.get("app") or task["title"], framed=spec.get("frame", True))
+                   title=spec.get("app") or task["title"], framed=spec.get("frame", True), clips=clips)
         if g:
             feat["gif"] = os.path.relpath(g, ws)
     shutil.rmtree(tmp, ignore_errors=True)
