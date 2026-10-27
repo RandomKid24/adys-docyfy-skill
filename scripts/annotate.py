@@ -20,7 +20,7 @@ from PIL import ImageFilter, Image, ImageDraw, ImageFont
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import theme
 
-STYLE_VERSION = "8"
+STYLE_VERSION = "10"
 SPOT = False
 CLEAN = True              # set per call by annotate(style=...); "clean" is the default, "sketch" is hand-drawn
 SS = 2                    # supersampling for smooth lines
@@ -220,9 +220,9 @@ def _rrect_loop(x0, y0, x1, y1, r, start_y=0.4, over=16.0, s=1.0):
 
 def shape_rect(box, rng, s, pad=None):
     x, y, w, h = box
-    pad = (3 if pad is None else pad) * s
+    pad = ((7 if SPOT else 3) if pad is None else pad) * s
     x0, y0, x1, y1 = x - pad, y - pad, x + w + pad, y + h + pad
-    r = min(6 * s, (y1 - y0) / 2.4, (x1 - x0) / 2.4)
+    r = min((10 if SPOT else 6) * s, (y1 - y0) / 2.4, (x1 - x0) / 2.4)
     main = wobble_pts(_rrect_loop(x0, y0, x1, y1, r, rng.uniform(0.3, 0.55), s=s), rng, s, step=6, amp=0.7)
     j = 1.4 * s
     faint = wobble_pts(_rrect_loop(x0 - j, y0 - j * 0.6, x1 + j * 0.8, y1 + j, r, rng.uniform(0.6, 0.85), over=8, s=s), rng, s, step=6, amp=0.9)
@@ -337,10 +337,10 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
     big = im.resize((im.width * SS, im.height * SS), Image.LANCZOS)
     d = ImageDraw.Draw(big)
     s = SS * max(1.0, im.width / 1280)     # one unit = 1px on a 1280-wide image
-    w = (2.2 if SPOT else 2.5) * s
+    w = (3.6 if SPOT else 2.5) * s
     seed = int(hashlib.md5(json.dumps(marks, sort_keys=True).encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
-    r_badge = (15 if SPOT else 13) * s
+    r_badge = (17 if SPOT else 13) * s
 
     def scaled(m):
         bx, by, bw, bh = m["box"]
@@ -357,20 +357,6 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
                 cell = max(6, int(8 * s))
                 small = reg.resize((max(1, reg.width // cell), max(1, reg.height // cell)), Image.BILINEAR)
                 big.paste(small.resize(reg.size, Image.NEAREST), (x0, y0))
-
-    # 1b. spotlight: dim everything except the marked areas, so the eye lands on the target
-    if SPOT:
-        lit = Image.new("L", big.size, 0)
-        ld = ImageDraw.Draw(lit)
-        pad = 9 * s
-        for m in marks:
-            if m.get("style") == "blur" or "box" not in m:
-                continue
-            x, y, bw, bh = scaled(m)
-            ld.rounded_rectangle([x - pad, y - pad, x + bw + pad, y + bh + pad], radius=9 * s, fill=255)
-        lit = lit.filter(ImageFilter.GaussianBlur(2.5 * s))
-        big = Image.composite(big, Image.blend(big, Image.new("RGB", big.size, ink), 0.1), lit)
-        d = ImageDraw.Draw(big)
 
     # 2. lines: paper halo, faint second pass and the main pen stroke are three masks,
     #    wobbled by the same noise, then painted on top of the screenshot
@@ -404,6 +390,9 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
             faint_mask = displace(faint_mask, s, seed + 1).point(lambda v: int(v * 0.26))
             ink_mask = displace(ink_mask, s, seed)
             big.paste(Image.new("RGB", big.size, ink), (0, 0), faint_mask)
+        if SPOT:   # soft glow in the accent colour, so the target reads on any background
+            glow = halo_mask.filter(ImageFilter.GaussianBlur(6 * s)).point(lambda v: min(255, int(v * 1.1)))
+            big.paste(Image.new("RGB", big.size, acc), (0, 0), glow.point(lambda v: int(v * 0.55)))
         big.paste(Image.new("RGB", big.size, paper), (0, 0), halo_mask)
         big.paste(Image.new("RGB", big.size, acc if SPOT else ink), (0, 0), ink_mask)
         d = ImageDraw.Draw(big)
