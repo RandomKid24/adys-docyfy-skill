@@ -98,6 +98,8 @@ When the app opens from your computer (localhost, staging or a demo link), the s
 - A recording is made as it runs, edited with a spotlight on the target, the step number and a caption bar. You get a GIF and an MP4 per task. Install `ffmpeg` for this (`brew install ffmpeg`).
 - A three-step task takes about 10 seconds.
 
+A PDF cannot play a video, so the recordings live in the help site. If you host the site, give the address (`--site-url`) and each task in the PDF gets a link and a QR code to its recording.
+
 You sign in yourself, once, in a window the script opens. The skill never types your password. On production it only looks and never clicks.
 
 ## What it writes

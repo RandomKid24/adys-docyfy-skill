@@ -8,7 +8,7 @@
 A module is rebuilt only if its JSON, the images it uses, common.json or this
 script changed. Hash is stored beside the PDF in build/S.hash.
 """
-import argparse, hashlib, html, io, json, math, os, re, sys, time
+import argparse, hashlib, html, io, json, math, os, re, sys, tempfile, time
 from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from diagram import flow_png
@@ -190,6 +190,38 @@ def fields_table(fields):
     return t
 
 
+def _slug(t):
+    s = re.sub(r"[^a-z0-9]+", "-", (t or "").lower()).strip("-")
+    return s or "section"
+
+
+def watch_box(feat, mod_slug, state):
+    """A PDF cannot play a GIF. When the help site has a public address, show a link and a QR code
+    to the recording there. Without an address, show nothing (a local file path helps nobody)."""
+    base = ((state.get("brand") or {}).get("site_url") or "").rstrip("/")
+    if not feat.get("gif") or not base:
+        return []
+    url = f"{base}/{mod_slug}.html#{_slug(feat.get('help_key') or feat['title'])}"
+    text = Paragraph(f'<b>Watch this as a short video</b><br/><font color="{accent_hex()}"><u><a href="{html.escape(url)}">{html.escape(url)}</a></u></font>', S["tip"])
+    cell = ""
+    try:
+        import qrcode
+        q = qrcode.QRCode(box_size=6, border=1)
+        q.add_data(url)
+        q.make(fit=True)
+        img = q.make_image(fill_color="#231F20", back_color="#FFFFFF").convert("RGB")
+        qp = os.path.join(tempfile.gettempdir(), f"dy-qr-{hashlib.sha1(url.encode()).hexdigest()[:10]}.png")
+        img.save(qp)
+        cell = RLImage(qp, width=20 * mm, height=20 * mm)
+    except Exception:
+        pass
+    t = Table([[text, cell]], colWidths=[FRAME_W - 24 * mm, 24 * mm])
+    t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), TIP_BG), ("LINEBEFORE", (0, 0), (0, 0), 3, ACCENT),
+                           ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                           ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    return [t, Spacer(1, 3 * mm)]
+
+
 def before_lines(feat):
     """Rows for the 'Before you start' box: [(label, text)]. Empty when the feature has none."""
     b = feat.get("before") or {}
@@ -253,6 +285,7 @@ def module_hash(ws, mod, common, state):
     h.update(json.dumps(mod, sort_keys=True).encode())
     h.update(json.dumps(common, sort_keys=True).encode())
     h.update(json.dumps(state.get("shots", {}), sort_keys=True).encode())
+    h.update(str((state.get("brand") or {}).get("site_url")).encode())
     h.update(open(__file__, "rb").read())
     imgs = []
     for feat in mod.get("features", []):
@@ -296,9 +329,8 @@ def build_module(ws, slug, force=False):
         head = [hp_]
         if feat.get("goal"):
             head.append(Paragraph(md(feat["goal"]), S["muted"]))
-        if feat.get("gif"):
-            head.append(Paragraph(f'Animated version: {html.escape(feat["gif"])} (open final/guide.html)', S["muted"]))
         head.append(Spacer(1, 2 * mm))
+        head += watch_box(feat, slug, state)
         head += before_box(feat)
         steps = [resolve_step(s, common, ws, state) for s in feat.get("steps", [])]
         if not steps:

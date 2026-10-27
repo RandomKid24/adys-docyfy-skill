@@ -51,7 +51,7 @@ def cmd_init(a):
         shutil.copy(COMMON_SRC, common_dst)
     st = {"app": a.app, "url": a.url, "scope": a.scope, "gifs": a.gifs,
           "audience": a.audience, "modules": {}, "order": [], "shots": {},
-          "brand": {"accent": a.accent, "logo": a.logo, "style": a.style or "spotlight"}}
+          "brand": {"accent": a.accent, "logo": a.logo, "style": a.style or "spotlight", "site_url": a.site_url.rstrip("/")}}
     save(a.ws, st)
     print(f"initialised {a.ws}")
 
@@ -133,7 +133,7 @@ def main():
 
     add("init", cmd_init, ("--app", {"required": True}), ("--url", {"default": ""}),
         ("--scope", {"default": "all"}), ("--gifs", {"action": "store_true"}),
-        ("--audience", {"default": ""}), ("--accent", {"default": ""}), ("--style", {"default": "spotlight", "choices": ["clean", "sketch", "spotlight"]}), ("--logo", {"default": ""}))
+        ("--audience", {"default": ""}), ("--accent", {"default": ""}), ("--style", {"default": "spotlight", "choices": ["clean", "sketch", "spotlight"]}), ("--logo", {"default": ""}), ("--site-url", {"default": ""}))
     add("add-module", cmd_add, ("--slug", {"required": True}), ("--title", {"required": True}),
         ("--features", {"default": ""}))
     add("status", cmd_status)

@@ -4,6 +4,7 @@ scipy
 reportlab
 pypdf
 playwright
+qrcode
 python-docx
 # optional, for check_guide.py --ocr (also needs the tesseract program installed)
 pytesseract

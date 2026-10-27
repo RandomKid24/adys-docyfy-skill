@@ -102,6 +102,9 @@ The biggest win is `capture.py` (see Fast capture above), which removes the brow
 5. **One module per helper.** When there are four or more modules and the person is happy to wait less, start one subagent per module. Each follows this file for its own module and writes only to `modules/<slug>.json` and `shots/`. Never let two helpers write `state.json` at the same time. Run the final build yourself.
 6. **Build last.** Capture and write all module JSON first, then run `annotate.py`, `build_pdf.py module` and `final` once. They cache, so a rerun only redraws what changed.
 
+## Recordings and the PDF
+A PDF cannot play a GIF or a video, so never promise one inside it. Recordings (`gifs/*.gif`, `gifs/*.mp4`) live in the help site (`build_site.py`) and the one-page HTML. Ask where the help site will be hosted. If the person gives an address, run `progress.py init ... --site-url https://help.example.com` (or set `brand.site_url` in `state.json`). Every task that has a recording then gets a "Watch this as a short video" box in the PDF with that link and a QR code, so a reader with the printout can scan it. With no address the PDF shows nothing about the recording. The recordings are edited as they are made (spotlight, numbered mark, a cursor that glides to the target, a ripple on each click, caption bar, typing shown letter by letter), so they need no editing afterwards. Prefer the MP4 for chat apps and email, the GIF for web pages.
+
 ## Update mode (after a release)
 
 Use this when a guide already exists and the app has changed. Do not rebuild everything.

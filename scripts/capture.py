@@ -67,7 +67,7 @@ def box_of(page, target):
 OVERLAY_JS = """([boxes, caption, accent]) => {
   document.getElementById('__dy')?.remove();
   const root = document.createElement('div'); root.id = '__dy';
-  root.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none;font-family:system-ui,sans-serif';
+  root.style.cssText = 'position:fixed;inset:0;z-index:2147483646;pointer-events:none;font-family:system-ui,sans-serif;opacity:0;transition:opacity .28s ease';
   boxes.forEach((b, i) => {
     const hole = document.createElement('div');
     hole.style.cssText = `position:absolute;left:${b[0]-8}px;top:${b[1]-8}px;width:${b[2]+16}px;height:${b[3]+16}px;border-radius:9px;` +
@@ -87,6 +87,30 @@ OVERLAY_JS = """([boxes, caption, accent]) => {
     root.appendChild(c);
   }
   document.body.appendChild(root);
+  requestAnimationFrame(() => requestAnimationFrame(() => { root.style.opacity = 1; }));
+}"""
+
+
+CURSOR_JS = """([x, y, accent]) => {
+  let c = document.getElementById('__dyc');
+  if (!c) {
+    c = document.createElement('div'); c.id = '__dyc';
+    c.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;width:26px;height:26px;margin:-3px 0 0 -3px;' +
+      'transition:left .6s cubic-bezier(.45,.05,.2,1),top .6s cubic-bezier(.45,.05,.2,1);left:' + x + 'px;top:' + y + 'px';
+    c.innerHTML = '<svg width="26" height="26" viewBox="0 0 26 26"><path d="M3 2 L3 20 L8 15.5 L11.5 23 L14.5 21.6 L11.2 14.3 L18 14 Z" fill="#231F20" stroke="#F2F7F9" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+    document.body.appendChild(c);
+  }
+}"""
+
+MOVE_JS = """([x, y]) => { const c = document.getElementById('__dyc'); if (c) { c.style.left = x + 'px'; c.style.top = y + 'px'; } }"""
+
+RIPPLE_JS = """([x, y, accent]) => {
+  const r = document.createElement('div');
+  r.style.cssText = `position:fixed;z-index:2147483647;pointer-events:none;left:${x-6}px;top:${y-6}px;width:12px;height:12px;border-radius:50%;` +
+    `border:3px solid ${accent};opacity:.9;transform:scale(1);transition:transform .45s ease-out,opacity .45s ease-out`;
+  document.body.appendChild(r);
+  requestAnimationFrame(() => { r.style.transform = 'scale(4)'; r.style.opacity = 0; });
+  setTimeout(() => r.remove(), 600);
 }"""
 
 
@@ -168,9 +192,9 @@ def to_gif(webm, out_gif, out_mp4):
         return None
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", webm, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out_mp4], check=False)
     pal = out_gif + ".png"
-    vf = "fps=10,scale=900:-1:flags=lanczos"
+    vf = "fps=15,scale=900:-1:flags=lanczos"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", webm, "-vf", vf + ",palettegen=stats_mode=diff", pal], check=False)
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", webm, "-i", pal, "-lavfi", vf + "[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=4", out_gif], check=False)
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", webm, "-i", pal, "-lavfi", vf + "[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5", out_gif], check=False)
     try:
         os.remove(pal)
     except OSError:
@@ -191,6 +215,7 @@ def run_task(p, spec, ws, task, video, accent):
     page = ctx.new_page()
     vw, vh = spec.get("viewport", [1440, 900])
     steps_out = []
+    cur = [vw * 0.5, vh * 0.62]     # where the on-screen cursor is
     for i, st in enumerate(task["steps"], 1):
         if "goto" in st:
             url = st["goto"] if st["goto"].startswith("http") else base + st["goto"]
@@ -222,13 +247,34 @@ def run_task(p, spec, ws, task, video, accent):
         for k in ("tip", "warning"):
             if st.get(k):
                 out[k] = st[k]
-        if video and boxes:        # the edited look in the recording: spotlight, numbers, caption
-            page.evaluate(OVERLAY_JS, [boxes, plain(st["text"]), accent])
-            page.wait_for_timeout(1100)
+        tx = ty = None
+        if video:
+            tgt = None
+            if action in ("click", "fill", "select"):
+                tgt = st[action][0] if isinstance(st[action], list) else st[action]
+            if boxes:
+                b = boxes[0] if tgt is None else (box_of(page, tgt) if tgt not in [m["target"] for m in marks_in] else boxes[[m["target"] for m in marks_in].index(tgt)])
+                tx, ty = b[0] + b[2] / 2, b[1] + b[3] / 2
+            page.evaluate(CURSOR_JS, [cur[0], cur[1], accent])
+            if boxes:
+                page.evaluate(OVERLAY_JS, [boxes, plain(st["text"]), accent])
+                page.wait_for_timeout(min(2600, 700 + 24 * len(plain(st["text"]))))   # time to read the caption
+            if tx is not None and action:
+                page.evaluate(MOVE_JS, [tx, ty])
+                page.wait_for_timeout(750)                                  # cursor glides to the target
+                page.evaluate(RIPPLE_JS, [tx, ty, accent]) if action == "click" else None
+                page.wait_for_timeout(250)
+                cur[0], cur[1] = tx, ty
         if action == "click":
             page.locator(st["click"]).first.click(timeout=8000)
         elif action == "fill":
-            page.locator(st["fill"][0]).first.fill(st["fill"][1])
+            if video:
+                loc = page.locator(st["fill"][0]).first
+                loc.click()
+                loc.fill("")
+                page.keyboard.type(st["fill"][1], delay=70)
+            else:
+                page.locator(st["fill"][0]).first.fill(st["fill"][1])
         elif action == "select":
             page.locator(st["select"][0]).first.select_option(st["select"][1])
         elif action == "press":
@@ -242,8 +288,9 @@ def run_task(p, spec, ws, task, video, accent):
             except Exception:
                 pass
         if video:
+            page.evaluate("(() => { const o = document.getElementById('__dy'); if (o) o.style.opacity = 0; })()")
+            page.wait_for_timeout(600 if not boxes else 450)
             page.evaluate("document.getElementById('__dy')?.remove()")
-            page.wait_for_timeout(500)
         steps_out.append(out)
     feat = {"title": task["title"], "goal": task.get("goal", ""), "steps": steps_out}
     if task.get("before"):
