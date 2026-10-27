@@ -15,14 +15,14 @@ sys.path.insert(0, HERE)
 try:
     from docx import Document
     from docx.enum.table import WD_TABLE_ALIGNMENT
-    from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
     from docx.shared import Inches, Mm, Pt, RGBColor
 except ImportError:
     sys.exit("python-docx is missing: pip install --break-system-packages python-docx")
 from PIL import Image
-from build_pdf import accent_hex, before_lines, load_common, load_state, resolve_step, step_image
+from build_pdf import before_lines, load_common, load_state, resolve_step, step_image
 from diagram import flow_png
 
 BOLD = re.compile(r"\*\*(.+?)\*\*")

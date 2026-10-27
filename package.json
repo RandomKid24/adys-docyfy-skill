@@ -1,6 +1,6 @@
 {
   "name": "docyfy",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Installs the docyfy skill into the AI tools on your machine",
   "bin": { "docyfy": "bin/install.js" },
   "files": ["bin", "SKILL.md", "README.md", "requirements.txt", "assets", "references", "scripts"],

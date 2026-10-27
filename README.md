@@ -1,26 +1,33 @@
 # Docyfy
 
-A Claude skill that writes a click-by-click user guide for any web app. It drives the app in Claude in Chrome, takes screenshots, outlines each click target by hand-drawn ink marks, numbers them, and builds the guide.
+A Claude skill that writes click-by-click user guides for web apps. It opens your app, takes sharp screenshots, rings each click target with a numbered highlight, and builds the guide. It can also record each task as a 4K video with a gliding cursor and an optional voice.
 
-You get a PDF. You can also get a Word file, a one-page cheat sheet per module, and a small help site you can host and link to from inside your app.
+You can get any of these:
 
-Highlights, workflow roads, fonts and colours follow the BeForth design system. You can swap the blue accent per project.
+- A PDF with contents, page numbers and bookmarks
+- A Word file
+- A one-page cheat sheet per module
+- A searchable help site you can host, with a `help-map.json` to link from inside your app
+- A 4K MP4 and a GIF for each task
+
+Guides can cover the whole app, chosen modules, or single tasks like "how to punch in".
 
 ## What you need
 
-- Claude Code, or any Claude app that supports skills.
-- The Claude in Chrome extension, signed in and running. The skill uses it to open the app and take screenshots.
-- Python 3.9 or newer and Node 16 or newer.
+- Claude Code, or any tool that supports skills (see the table below).
+- Node 16 or newer and Python 3.9 or newer.
+- Google Chrome. The skill drives the one you have, so there is no browser download. If Chrome is missing, the installer fetches Chromium.
+- `ffmpeg` for videos (`brew install ffmpeg`). Not needed for PDFs.
 
 ## Install
 
-One command. It looks for the AI tools on your machine and copies the skill into each one, then installs the Python packages into their own virtualenv at `~/.docyfy/venv`, so your system Python stays untouched. You need Node 16 or newer.
+One command. It finds the AI tools on your machine, copies the skill into each one, and installs the Python packages into their own virtualenv at `~/.docyfy/venv`, so your system Python stays untouched.
 
 ```bash
 npx github:RandomKid24/adys-docyfy-skill
 ```
 
-It prints what it found and asks once before installing. Restart your AI tool afterwards.
+It prints what it found and asks once. Restart your AI tool afterwards. To update, run the same command again.
 
 | Tool | Skills folder | Confidence |
 | --- | --- | --- |
@@ -30,21 +37,18 @@ It prints what it found and asks once before installing. Restart your AI tool af
 | Gemini CLI | `~/.gemini/skills` | Best effort |
 | Cursor | `~/.cursor/skills` | Best effort |
 
-Best effort means the folder is my guess for that tool. If it does not pick the skill up, check the tool's docs for where skills go and use `--target`.
-
-Options:
+Best effort means the folder is a guess. If the tool does not pick the skill up, check its docs for where skills go and use `--target`.
 
 ```bash
 npx github:RandomKid24/adys-docyfy-skill --yes          # no question, install everywhere found
-npx github:RandomKid24/adys-docyfy-skill --project      # only this project (./.claude/skills)
+npx github:RandomKid24/adys-docyfy-skill --project      # this project only (./.claude/skills)
 npx github:RandomKid24/adys-docyfy-skill --tool claude  # one tool only
-npx github:RandomKid24/adys-docyfy-skill --target ~/my/skills   # any folder
+npx github:RandomKid24/adys-docyfy-skill --target ~/my/skills
 npx github:RandomKid24/adys-docyfy-skill --list         # show what it found, change nothing
 npx github:RandomKid24/adys-docyfy-skill --uninstall
 npx github:RandomKid24/adys-docyfy-skill --no-deps      # skip the Python virtualenv
+npx github:RandomKid24/adys-docyfy-skill --no-browser   # never download Chromium
 ```
-
-To update, run the same command again. It replaces the old copy.
 
 ### Install by hand
 
@@ -55,52 +59,64 @@ python3 -m venv ~/.docyfy/venv
 echo ~/.docyfy/venv/bin/python > ~/.claude/skills/docyfy/.python
 ```
 
-The folder name must be `docyfy`.
-
-`pytesseract` in the requirements is optional. It powers `check_guide.py --ocr`, which scans finished screenshots for readable personal data. It also needs the `tesseract` program (`apt install tesseract-ocr` or `brew install tesseract`).
+The folder must be named `docyfy`. `pytesseract` is optional. It powers `check_guide.py --ocr`, which scans finished screenshots for readable personal data, and needs the `tesseract` program too.
 
 ## Use it
 
-Open Claude Code in your project (or anywhere) and say what you want:
+Type `/docyfy` and add words to pick the output.
 
-> Make a user guide for my app at http://localhost:3000
+| Command | You get |
+| --- | --- |
+| `/docyfy` | Claude asks what to make |
+| `/docyfy pdf` | PDF and cheat sheets |
+| `/docyfy video` | MP4 and GIF recordings only |
+| `/docyfy word` | Word file |
+| `/docyfy site` | Help site |
+| `/docyfy all` | Everything above |
+| `/docyfy video punch-in 4k voice` | A narrated 4K video of one task |
 
-> Write help docs for the Customers and Invoices modules of our staging app, https://staging.example.com
+Words combine (`/docyfy pdf video`). Add `draft`, `1080p`, `4k` or `8k` to set video quality. Or just describe it in plain language:
 
-Claude then asks a few things before it starts.
+> /docyfy make step-by-step guides for these tasks in https://staging.example.com: how to punch in, how to apply for leave
 
-1. The whole app or only some features.
-2. Where to capture. Local, a staging or demo link, or production. Production is read-only and real data gets blurred.
-3. Brand accent colour and logo, if you have them.
-4. Whether you want GIFs, a Word file, cheat sheets and a help site.
+Claude asks a few things once: the scope, where to capture (local, staging or production), your accent colour and logo, and who the readers are. Production is look-only and real data is blurred.
 
-Log in to the app in Chrome first if it needs a sign-in. The skill never types your passwords.
+Each task starts at the first screen the reader sees and ends at the confirmation message. Every step has a screenshot with the target highlighted and numbered, a "Before you start" box, and a table of the form fields.
 
-## Guides for specific tasks
+## How capture works
 
-You can ask for step-by-step guides for particular tasks instead of the whole app:
+When the app opens from your computer (localhost, staging or a demo link), the skill runs `scripts/capture.py`:
 
-```
-/docyfy make step-by-step guides for these tasks in https://staging.example.com
-1. How to punch in and punch out
-2. How to apply for leave
-3. How to submit a daily work report
-```
-
-Each task becomes its own section. It starts at the screen the reader sees first and ends at the confirmation message. Every step has a screenshot with the target highlighted and a number, plus a "Before you start" box and a table of the fields. You can also get a one-page cheat sheet for the tasks you use most.
-
-## Fast capture, sharp pictures and edited recordings
-
-When the app opens from your computer (localhost, staging or a demo link), the skill runs `scripts/capture.py`. It drives the Google Chrome you already have, through Playwright (no extra browser download; if Chrome is missing the installer fetches Chromium), so:
-
-- Screenshots are 2x sharp (a 1440 px window gives a 2880 px picture), not the 800 px the built-in browser tool returns.
+- Screenshots are 2x sharp. A 1440 px window gives a 2880 px picture.
 - Highlight boxes are measured from the page, so they sit exactly on the target.
-- A recording is made as it runs, edited with a spotlight on the target, the step number and a caption bar. You get a GIF and an MP4 per task. Install `ffmpeg` for this (`brew install ffmpeg`).
-- A three-step task takes about 10 seconds.
+- A three-step task captures in about 10 seconds. Claude does not spend a turn on each click.
+- You sign in yourself, once, in a window the script opens (`capture.py login`). The skill never types your password.
+- On production it only looks. It never clicks, types or submits.
 
-A PDF cannot play a video, so the recordings live in the help site. If you host the site, give the address (`--site-url`) and each task in the PDF gets a link and a QR code to its recording.
+If the app is not reachable from your machine (single sign-on, captcha, private network), Claude falls back to browser tools and takes screenshots one click at a time.
 
-You sign in yourself, once, in a window the script opens. The skill never types your password. On production it only looks and never clicks.
+## Videos
+
+Videos come from a studio renderer. It takes sharp stills of each page state, then draws the cursor, zoom, captions, click ripples and fades itself at 60 frames per second. Nothing is screen-recorded, so motion is even and the resolution is real.
+
+A finished video has a title card, the recording in a Mac-style window, a "Step 2 of 4" chip on each caption, a smooth zoom toward each click target, a cursor that curves to the target and squeezes on the click, and an end card.
+
+Set options in the capture spec header:
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `quality` | `4k` | `4k` (3840x2160, 60 fps), `1080p`, `draft` (1080p, 30 fps, renders in seconds), `8k` |
+| `voice` | off | `true` or `{"name": "Rishi", "rate": 170}`. Reads each step aloud. MP4 only |
+| `zoom`, `zoom_level` | on, 1.3 | Zoom toward click targets |
+| `cards` | on | Title and end cards |
+| `highlight` | `auto` | `auto` shows the caption on click steps and a soft ring on look-only steps. `full` rings every mark. `caption` shows captions only |
+| `engine` | `studio` | `live` records the browser as it runs (1280 px, less smooth) |
+
+Use `draft` while checking and `4k` for the final pass. 4K takes a few minutes per task on a laptop and is much faster on a Mac with ffmpeg's VideoToolbox encoder.
+
+Voice uses macOS `say` with the Rishi voice, then espeak-ng elsewhere. Set `DOCYFY_TTS_CMD='mytts "{text}" {out}'` to use another engine.
+
+A PDF cannot play video. Recordings live in the help site. If you host the site, pass its address (`--site-url`) and each task in the PDF gets a "Watch this as a short video" link with a QR code.
 
 ## What it writes
 
@@ -110,59 +126,46 @@ Everything goes in a workspace folder, so a stopped run picks up where it left o
 | --- | --- |
 | `state.json` | Progress, brand settings, shared screenshots |
 | `modules/<name>.json` | One module's steps, marks, fields and common problems |
-| `shots/`, `annotated/` | Raw and marked screenshots |
-| `final/user-guide.pdf` | The guide, with contents and page numbers |
+| `shots/`, `annotated/` | Raw and highlighted screenshots |
+| `gifs/` | MP4 and GIF recordings |
+| `final/user-guide.pdf` | The guide |
 | `final/user-guide.docx` | Word version |
 | `final/cheatsheets/` | One A4 page per module, plus `all.pdf` |
 | `final/site/` | Static help site with search and `help-map.json` |
 
 ## Keeping the guide current
 
-When your app changes, ask Claude to update the guide. It compares saved page fingerprints, finds the screens that changed, and redoes only those. Everything else is reused. Help keys stay the same, so links from your app keep working.
+When your app changes, ask Claude to update the guide. It compares saved page fingerprints, finds the screens that changed, and redoes only those. Help keys stay the same, so links from your app keep working.
 
 ## Linking help from your app
 
-The site build writes `help-map.json`. It maps a `help_key` to a page URL. Point your app's "Help" button at the key for the current screen.
+The site build writes `help-map.json`, which maps a `help_key` to a page URL. Point your app's Help button at the key for the current screen.
+
+```js
+window.open(HELP_BASE + helpMap["customers/add-a-customer"])
+```
 
 ## Change the look
 
-All colours and fonts live in `scripts/theme.py`. To use another accent for one project, pass `--accent "#RRGGBB"` to `scripts/progress.py init`. Highlights use a spotlight by default (rest of the screen dimmed slightly, target outlined in the accent colour). Pass `--style clean` for a plain dark outline or `--style sketch` for a hand-drawn pen look. Edit `theme.py` for anything else and rerun the build. The cache sees the change and redraws.
+Colours and fonts live in `scripts/theme.py`. Pass `--accent "#RRGGBB"` to `scripts/progress.py init` for one project. Highlights default to `spotlight`, a thick accent ring set a few pixels off the target with a soft glow. Pass `--style clean` for a plain dark outline or `--style sketch` for a hand-drawn pen look. The cache notices a style change and redraws.
 
-## Layout
+## Repo layout
 
 ```
-SKILL.md              what Claude reads and follows
-references/capture.md how to capture screens in Chrome
+SKILL.md              short router Claude reads first (about 1k tokens)
+references/           detail Claude reads only when a step needs it
 assets/               shared steps (login, search, pagination) and fonts
-scripts/              annotate, build_pdf, build_docx, build_site, build_cheatsheet, checks
+scripts/              capture, studio, annotate, build_pdf, build_docx, build_site, build_cheatsheet, checks
+bin/install.js        the npx installer
 ```
+
+The skill is token optimized. `SKILL.md` stays small, each step loads its own reference file, clicking and drawing run in scripts, pages are read as text instead of pictures, and progress is saved so nothing is redone.
 
 ## Known limits
 
-- Tested end to end on sample data. Run it on one real module first and check that the highlight boxes line up with your screens.
+- Tested end to end on a demo app and sample data. Run it on one real task first and check that the highlights line up with your screens.
+- The voice has only been tested with a stand-in tone, not the real macOS `say` voice.
 - The bundled font lacks the rupee sign in its main set. PDFs handle it. Images show "Rs".
-- GIFs download through the browser, so you may have to save them by hand into the workspace.
+- Apps behind single sign-on or captcha need the slower browser-tool capture.
 
 The fonts are Plus Jakarta Sans under the SIL Open Font License (`assets/fonts/LICENSE-OFL.txt`).
-
-### Narrated recordings
-
-Add `"voice": true` to the capture spec and each step is read aloud, like the Frappe help videos. The caption stays on screen until the sentence ends. The MP4 carries the voice and the GIF stays silent. On a Mac it uses `say` with the Rishi voice (change it with `"voice": {"name": "Samantha", "rate": 180}`). Elsewhere it falls back to espeak-ng. To use another engine, set `DOCYFY_TTS_CMD` to a command with `{text}` and `{out}` in it.
-
-### Highlights in videos
-
-The cursor already shows where to click, so videos skip the dim and the numbered disc on click, fill and select steps. You get the caption and the cursor. Look-only steps ("you see the confirmation") get a soft ring. Set `"highlight": "full"` in the capture spec for the spotlight look, or `"caption"` for captions only. PDFs and screenshots keep the spotlight, since they have no cursor.
-
-### What a finished video has
-
-A title card with the task name and goal, then the recording in a Mac-style window. The view eases in toward each click target and back out, the cursor glides and ripples on the click, and the caption carries a "Step 2 of 4" chip. An end card closes it. The voice track, if on, starts after the title card. Turn pieces off in the spec with `"cards": false`, `"zoom": false` or `"highlight": "caption"`. `"zoom_level": 1.3` sets how close it gets.
-
-### Video quality
-
-Videos come from a studio renderer. It takes sharp stills of every page state, then draws the cursor, zoom, captions, click ripples and fades itself at 60 frames per second. That gives true 4K and perfectly even motion, which a live screen recording cannot. Set `"quality"` in the capture spec to `"4k"` (default), `"1080p"`, `"draft"` (1080p at 30 fps, renders in seconds, good for checking) or `"8k"` (slow, large files). `"engine": "live"` switches back to recording the browser as it runs. Rendering 4K takes a few minutes per task on a laptop, so use `draft` first and `4k` for the final pass.
-
-### Choose what to make
-
-Add words after the command. `/docyfy pdf` makes the PDF only. `/docyfy video` makes the recordings only. `/docyfy all` makes everything: PDF, Word file, help site, cheat sheets and videos. You can combine them (`/docyfy pdf video`), name a task or module (`/docyfy video punch-in`), and set video quality (`draft`, `1080p`, `4k`, `8k`) or add `voice`. With no words, it asks.
-
-To pick up updates on your computer, run `npx github:RandomKid24/adys-docyfy-skill` again.

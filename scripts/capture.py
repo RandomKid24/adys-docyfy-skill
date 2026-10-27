@@ -406,7 +406,7 @@ def to_gif(webm, out_gif, out_mp4, title="", framed=True, clips=None, zooms=None
 
 def studio_step(S, page, st, i, n, action, tgt_box, boxes, text, audio, dsec, spec, look_only):
     """One step in studio mode: advance the virtual clock, lay out caption, cursor, zoom and ring, and run the action."""
-    vw, vh = S.vw, S.vh
+    vw = S.vw
     chip = f"Step {i} of {n}" if n > 1 else ""
     read = max(min(2.6, 0.7 + 0.024 * len(text)), dsec + 0.35)
     t_cap = S.t

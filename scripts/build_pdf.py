@@ -8,7 +8,7 @@
 A module is rebuilt only if its JSON, the images it uses, common.json or this
 script changed. Hash is stored beside the PDF in build/S.hash.
 """
-import argparse, hashlib, html, io, json, math, os, re, sys, tempfile, time
+import argparse, hashlib, html, io, json, os, re, sys, tempfile, time
 from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from diagram import flow_png
@@ -21,7 +21,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
-from reportlab.platypus import (CondPageBreak, Image as RLImage, KeepTogether, PageBreak, Paragraph,
+from reportlab.platypus import (CondPageBreak, Image as RLImage, KeepTogether, Paragraph,
                                 SimpleDocTemplate, Spacer, Table, TableStyle)
 
 import theme as _theme

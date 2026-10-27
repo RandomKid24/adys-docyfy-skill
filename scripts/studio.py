@@ -5,7 +5,7 @@ Result: true 4K at 60 fps (or 1080p for quick drafts), perfectly even motion, an
 
 capture.py builds a Timeline while it drives the page, then calls Timeline.render().
 """
-import json, math, os, shutil, subprocess, sys
+import json, math, os, subprocess, sys
 from functools import lru_cache
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -77,7 +77,7 @@ class Timeline:
         extra = dict(intro=intro, outro=outro, total=total, fps=fps, W=W, H=H, i_len=i_len, o_len=o_len, body=body)
         json.dump(extra, open(tj + ".x", "w"))
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(fps), "-i", "-"]
-        graph, amap = [], []
+        graph = []
         for k, (path, t) in enumerate(self.audio):
             cmd += ["-i", path]
             ms = int((t + i_len) * 1000)
@@ -308,7 +308,6 @@ def _body(t):
     """The framed recording at body time t."""
     from PIL import Image, ImageDraw
     d, L = G["d"], G["L"]
-    vw, vh = d["vw"], d["vh"]
     z, sx, sy = _zoom_state(t)
     stills = d["stills"]
     i = 0
@@ -377,7 +376,7 @@ def _frame(k):
     d = G["d"]
     fps = d["fps"]
     t = k / fps
-    il, ol, body = d["i_len"], d["o_len"], d["body"]
+    il, body = d["i_len"], d["body"]
     X = 0.45                                           # cross-dissolve between a card and the recording
     if d["intro"] and t < il:
         card = _card(d["intro"][0])
