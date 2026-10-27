@@ -4,6 +4,7 @@ boxes are measured exactly, and the video is edited as it records. No per-click 
 
   capture.py login   --url URL --out ws/.auth/state.json     you sign in yourself, in a real window
   capture.py explore --url URL [--state S] [--wait CSS]       list clickable things as text (no images)
+  capture.py voices  [--out DIR] [--langs en,hi,mr]          hear the narration voices before you render
   capture.py run     --ws W --spec spec.json [--no-video]     do the tasks, write shots, boxes, GIFs
 
 Spec (spec.json):
@@ -160,6 +161,8 @@ def speak(text, out_base, voice=None, rate=170, lang="en"):
                     if os.path.exists(mp3) and os.path.getsize(mp3) > 500:
                         out = mp3
                 except Exception:
+                    if os.path.exists(out_base + ".mp3"):
+                        os.remove(out_base + ".mp3")
                     _edge_broken.append(1)             # offline or not installed, do not retry every step
             if out is None and shutil.which("say"):
                 out = out_base + ".aiff"
@@ -817,11 +820,27 @@ def cmd_run(a):
     print(f"wrote {mp} in {time.time() - t0:.1f}s. Next: check_boxes.py, annotate.py, build_pdf.py module --slug {slug}")
 
 
+SAMPLES = {"en": "Open Leave type and choose Sick leave. The box now shows your choice.",
+           "hi": "छुट्टी का प्रकार खोलें और बीमारी की छुट्टी चुनें। अब बॉक्स में आपकी पसंद दिखती है।",
+           "mr": "रजेचा प्रकार उघडा आणि आजारपणाची रजा निवडा. आता बॉक्समध्ये तुमची निवड दिसते."}
+
+
+def cmd_voices(a):
+    """Make one audio sample per language with the same voice chain the videos use, so you can hear it first."""
+    os.makedirs(a.out, exist_ok=True)
+    for lg in a.langs.split(","):
+        f = speak(SAMPLES.get(lg, SAMPLES["en"]), os.path.join(a.out, f"voice-{lg}"), None, 170, lg)
+        print(f"{lg}: {f}" if f else f"{lg}: no voice engine worked (install edge-tts, or use a Mac, or set DOCYFY_TTS_CMD)")
+    if _edge_broken:
+        print("edge-tts did not work (not installed or no internet), so a fallback voice was used where one existed.")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("login"); s.add_argument("--url", required=True); s.add_argument("--out", required=True); s.set_defaults(f=cmd_login)
     s = sub.add_parser("explore"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--wait"); s.set_defaults(f=cmd_explore)
+    s = sub.add_parser("voices"); s.add_argument("--out", default="voice-samples"); s.add_argument("--langs", default="en,hi,mr"); s.set_defaults(f=cmd_voices)
     s = sub.add_parser("run"); s.add_argument("--ws", required=True); s.add_argument("--spec", required=True)
     s.add_argument("--no-video", action="store_true"); s.add_argument("--only"); s.set_defaults(f=cmd_run)
     a = ap.parse_args()

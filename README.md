@@ -118,7 +118,7 @@ Use `draft` while checking and `4k` for the final pass. 4K takes a few minutes p
 
 Add `"langs": ["en", "hi", "mr"]` to the spec, or say `hi` or `mr` after the command. One video is rendered per language from the same captured stills, so extra languages only cost render time. Captions, step chips, title and end cards all switch language. Claude writes the Hindi and Marathi step text for you.
 
-Voice tries these in order: your own command (`DOCYFY_TTS_CMD`), Microsoft neural voices through `edge-tts` (best Hindi and Marathi, needs internet, no key), macOS `say`, then espeak-ng. Voices can be changed per language in the spec (see `references/video.md`).
+Voice tries these in order: your own command (`DOCYFY_TTS_CMD`), Microsoft neural voices through `edge-tts` (best Hindi and Marathi, needs internet, no key), macOS `say`, then espeak-ng. Voices can be changed per language in the spec (see `references/video.md`). To hear them before you render a video, run `<python> scripts/capture.py voices` and play the three files it writes.
 
 ### Dropdowns
 

@@ -33,6 +33,8 @@ Voice (with `"voice": true`) picks the first engine that works:
 3. macOS `say` (Rishi for English, Lekha for Hindi and Marathi).
 4. espeak-ng (robotic, but works offline).
 
+To hear the voices first: `capture.py voices [--out DIR] [--langs en,hi,mr]` writes one sample per language.
+
 Timing follows the longest narration across languages, so every language fits. Each caption stays up for the whole sentence.
 
 ## Dropdowns
