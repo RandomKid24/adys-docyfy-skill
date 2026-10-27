@@ -29,7 +29,7 @@ Claude writes the translations into the spec in plain spoken words, never word f
 
 Voice (with `"voice": true`) picks the first engine that works:
 1. `DOCYFY_TTS_CMD='mytts "{text}" {out}'`, with `{lang}` also available.
-2. Microsoft neural voices through the `edge-tts` package. Best for Hindi and Marathi. Needs internet, no key. Defaults `en-IN-NeerjaNeural`, `hi-IN-SwaraNeural`, `mr-IN-AarohiNeural`. Change with `"voice": {"voices": {"hi": "hi-IN-MadhurNeural"}}`.
+2. Microsoft neural voices through the `edge-tts` package (optional, not installed by default: `~/.docyfy/venv/bin/pip install edge-tts`). Best for Hindi and Marathi. Needs internet, no key. Defaults `en-IN-NeerjaNeural`, `hi-IN-SwaraNeural`, `mr-IN-AarohiNeural`. Change with `"voice": {"voices": {"hi": "hi-IN-MadhurNeural"}}`.
 3. macOS `say` (Rishi for English, Lekha for Hindi and Marathi).
 4. espeak-ng (robotic, but works offline).
 

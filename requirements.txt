@@ -5,7 +5,6 @@ reportlab
 pypdf
 playwright
 qrcode
-edge-tts
 python-docx
 # optional, for check_guide.py --ocr (also needs the tesseract program installed)
 pytesseract

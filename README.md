@@ -173,7 +173,7 @@ The skill is token optimized. `SKILL.md` stays small, each step loads its own re
 
 - Tested end to end on a demo app and sample data. Run it on one real task first and check that the highlights line up with your screens.
 - The voice has only been tested with a stand-in tone, not the real macOS `say` or Microsoft voices. Hindi and Marathi text and captions are tested.
-- macOS has no Marathi voice, so Marathi needs `edge-tts` (needs internet) for good audio.
+- Voice is optional and off by default. For good Hindi or Marathi audio, run `pip install edge-tts` in `~/.docyfy/venv`. It is not installed with the skill.
 - The bundled font lacks the rupee sign in its main set. PDFs handle it. Images show "Rs".
 - Apps behind single sign-on or captcha need the slower browser-tool capture.
 
