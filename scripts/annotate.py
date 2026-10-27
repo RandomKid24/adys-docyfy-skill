@@ -89,6 +89,58 @@ def pen(d, pts, w, fill=255, taper=0.12, s=1.0):
         d.ellipse([x - r, y - r, x + r, y + r], fill=fill)
 
 
+def add_minimap(out, full, region, avoid, acc, ink, paper):
+    """Small map of the whole screen in a corner of a zoomed picture, with the zoomed area boxed.
+    A crop alone can leave the reader asking where on the screen this is. The map never covers a
+    mark: it tries each corner at a few sizes, and if none is clear it goes in a strip below."""
+    pad, ring = 10, 3
+    base = int(min(max(out.width * 0.24, 150), 380))
+
+    def make(mw):
+        mh = max(1, int(mw * full.height / full.width))
+        thumb = full.resize((mw, mh), Image.LANCZOS)
+        r = (region[0] / full.width * mw, region[1] / full.height * mh, region[2] / full.width * mw, region[3] / full.height * mh)
+        dim = Image.blend(thumb, Image.new("RGB", thumb.size, ink), 0.38)
+        mask = Image.new("L", thumb.size, 0)
+        ImageDraw.Draw(mask).rectangle(r, fill=255)
+        thumb = Image.composite(thumb, dim, mask)
+        ImageDraw.Draw(thumb).rectangle([r[0], r[1], max(r[2], r[0] + 3), max(r[3], r[1] + 3)], outline=acc, width=2)
+        return thumb
+
+    def overlap(p, mw, mh):
+        t = 0.0
+        for ax0, ay0, ax1, ay1 in avoid:
+            w_, h_ = min(p[0] + mw, ax1) - max(p[0], ax0), min(p[1] + mh, ay1) - max(p[1], ay0)
+            if w_ > 0 and h_ > 0:
+                t += w_ * h_
+        return t
+
+    def stamp(canvas, thumb, pos):
+        d = ImageDraw.Draw(canvas)
+        mw, mh = thumb.size
+        d.rectangle([pos[0] - ring, pos[1] - ring, pos[0] + mw + ring, pos[1] + mh + ring], fill=paper)
+        d.rectangle([pos[0] - 1, pos[1] - 1, pos[0] + mw, pos[1] + mh], outline=ink, width=1)
+        canvas.paste(thumb, pos)
+
+    for mw in (base, int(base * 0.75), int(base * 0.55)):
+        if mw < 80:
+            continue
+        thumb = make(mw)
+        mh = thumb.height
+        cands = [(out.width - mw - pad, out.height - mh - pad), (pad, out.height - mh - pad),
+                 (out.width - mw - pad, pad), (pad, pad)]
+        best = min(cands, key=lambda p: overlap(p, mw, mh))
+        if overlap(best, mw, mh) == 0:
+            stamp(out, thumb, best)
+            return out
+    mw = int(base * 0.75)
+    thumb = make(mw)
+    band = Image.new("RGB", (out.width, out.height + thumb.height + 2 * pad), paper)
+    band.paste(out, (0, 0))
+    stamp(band, thumb, (out.width - mw - pad, out.height + pad))
+    return band
+
+
 def draw_strokes(strokes, size, s, K=3):
     """Draw pen strokes [(points, width)] into an L mask. Drawn K times larger and shrunk, so the
     edges are smooth instead of beaded."""
@@ -359,11 +411,25 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
         draw_badge(d, c, m["n"], r_badge, s, acc, paper)
 
     out = big.resize(im.size, Image.LANCZOS)
+    mini = None
     if crop:
         cx, cy, cw, ch = crop
-        out = out.crop((max(0, int(cx * sx)), max(0, int(cy * sy)), min(im.width, int((cx + cw) * sx)), min(im.height, int((cy + ch) * sy))))
+        x0, y0 = max(0, int(cx * sx)), max(0, int(cy * sy))
+        x1, y1 = min(im.width, int((cx + cw) * sx)), min(im.height, int((cy + ch) * sy))
+        full = out
+        out = out.crop((x0, y0, x1, y1))
+        if (x1 - x0) * (y1 - y0) < 0.8 * im.width * im.height:
+            mini = (full, (x0, y0, x1, y1))
+    f = 1.0
     if out.width > max_w:
-        out = out.resize((max_w, int(out.height * max_w / out.width)), Image.LANCZOS)
+        f = max_w / out.width
+        out = out.resize((max_w, int(out.height * f)), Image.LANCZOS)
+    if mini:
+        full, (x0, y0, x1, y1) = mini
+        avoid = [((bb[0] / SS - x0) * f, (bb[1] / SS - y0) * f, (bb[2] / SS - x0) * f, (bb[3] / SS - y0) * f) for bb in all_bb]
+        rr = r_badge / SS * f * 1.3
+        avoid += [((c[0] / SS - x0) * f - rr, (c[1] / SS - y0) * f - rr, (c[0] / SS - x0) * f + rr, (c[1] / SS - y0) * f + rr) for c in taken]
+        out = add_minimap(out, full, (x0, y0, x1, y1), avoid, acc, ink, paper)
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     out.save(out_path, "JPEG", quality=95, subsampling=0, optimize=True)
 

@@ -73,7 +73,7 @@ Repeat for each pending module. Do not hold more than one module in working memo
 
 The reader is a shop clerk or accountant, not a developer. Every choice below serves one question: can they find the right button in five seconds?
 
-- One screen, one idea per image. Crop to the part of the screen that matters (`crop`) so buttons are big enough to see on a phone or a printout.
+- One screen, one idea per image. Show the WHOLE screen by default, so the reader sees where the target sits on the page, in the menu or in the form. Crops confuse people who do not know the app. Use `crop` only when the target is tiny (an icon in a dense toolbar, one cell in a big table). A cropped image automatically gets a small map of the full screen in a corner with the zoomed area boxed, so the reader never wonders where it is.
 - Use `rect` for fields, `circle` for icons and small buttons, `arrow` when the target is hard to spot, `underline` for text links. Four numbered marks per image at most.
 - Say where it is in words as well ("top right", "left menu"), and name the button exactly as it is labelled.
 - Use the user's words, not the database's. "Customer" not "party master", unless that is the label on screen.
@@ -139,7 +139,7 @@ A changed fingerprint can be a false alarm (a heading with a record count, say).
 - `style`: `rect` (default, wobbly box), `circle` (loop around small buttons and icons), `underline`, `arrow`, `blur`.
 - `blur` pixelates a region and draws nothing else (leave out `n`). Use it on names, phone numbers, emails, addresses, amounts, GST/PAN numbers and anything else that looks like real client data. Real data in a guide that gets shared is a leak, so measure those boxes in the same JS call as the click targets and add a blur mark whenever such fields are visible.
 - Several marks on one image get badges 1, 2, 3, and the step text lists them in the same order. Keep to 4 marks per image; split the step otherwise.
-- `crop`: optional `[x, y, w, h]` per step to zoom on the relevant area. This makes images readable and the PDF small.
+- `crop`: optional `[x, y, w, h]` per step, rarely needed. Leave it out so the guide shows the full screen. When set, the picture gets a locator map in a corner (see "Making it easy for readers"). Cheat sheet thumbnails are always zoomed this way because the cards are small.
 - `warning` (step): red caution box for destructive or irreversible actions. `tip` is the bone-coloured hint box.
 - `fields` (feature): `[{"name": "Customer name", "required": true, "help": "Full legal name as on the invoice.", "example": "Sample Traders"}]`. Rendered as a "Fields on this screen" table after the steps.
 - `cheatsheet` (module): `[{"want": "Add a new customer", "go": "Customers > **Add customer**"}]`. A two-column "I want to..." table at the top of the module; the main use is in `quick-start`.
