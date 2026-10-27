@@ -1,22 +1,14 @@
 ---
 name: docyfy
-description: Docyfy builds a click-by-click user guide (PDF, plus optional GIFs) for any web application by driving it in Claude in Chrome, taking screenshots, and marking each click target with a hand-drawn outline and a numbered badge in the BeForth look. Asks whether the person wants the whole software or only specific features, works one module at a time, saves progress to disk so work is never repeated, and reuses screenshots and common steps like login, search and pagination. Use this whenever the user asks for a user guide, user manual, help documentation, how-to guide, training material, onboarding walkthrough, feature guide, or "where to click" documentation for a web app, ERP, CRM, dashboard or admin panel, even if they never say "PDF" or "screenshots".
+description: Docyfy builds click-by-click user guides for web apps (PDF, Word, hostable help site, one-page cheat sheets, plus edited GIF and MP4 screen recordings). It can cover the whole app, chosen modules, or specific tasks such as how to punch in. It captures sharp 2x screenshots with a spotlight and numbered highlight on every click target, blurs personal data, and saves progress so nothing is redone. Use this whenever the user asks for a user guide, user manual, help documentation, how-to guide, training material, onboarding walkthrough, feature guide, step-by-step task guide, or "where to click" documentation for a web app, ERP, CRM, HRMS, dashboard or admin panel, even if they never say PDF or screenshots.
 ---
 
-# User guide builder
+# Docyfy
 
-Produce a PDF that tells a non-technical reader exactly where to click, in order, for every feature of a web app. Each step has a screenshot with a hand-drawn highlight and a numbered badge that matches the numbered instruction beside it.
+Produce a PDF that tells a non-technical reader exactly where to click, in order, for every feature of a web app. Each step has a screenshot with a spotlight on the target and a numbered badge that matches the numbered instruction beside it. Tasks can also get an edited screen recording.
 
 ## Look
-Every output (PDF, Word, site, cheat sheets, workflow roads) uses the BeForth design system through `scripts/theme.py`: paper background, ink line work, bone fills, one signal blue accent, Plus Jakarta Sans (bundled in `assets/fonts`), square corners, 1px rules, no shadows or gradients. Highlights use a spotlight. The rest of the screen is dimmed about 10% so the target stays bright, the target gets a slim outline in the accent colour with a thin paper ring, and a numbered disc sits beside it, never on the line. Other styles through `--style` on `progress.py init`: `clean` (dark outline, no dimming) and `sketch` (hand-drawn pen). Workflows are drawn as a road with numbered stops and a flag. Pass `--accent "#RRGGBB"` to `progress.py init` when a client wants their own colour in place of the signal blue. Do not restyle by hand. Change `theme.py` and rerun.
-
-The job is large (dozens of screens), so the whole design aims at spending few tokens and never redoing work:
-
-- One module per pass. After a module is built, its details leave your head and live on disk.
-- Everything is saved to a workspace folder. `progress.py` is the memory. Read its short `status` output, not the files.
-- Screenshots and wording that repeat (login, search box, pagination, delete confirm) are captured or written once and reused.
-
-Scripts live in `scripts/` next to this file. Python: if the file `.python` exists next to this SKILL.md, its single line is the interpreter to use (the installer made a virtualenv with every package). Otherwise use `python3`. Run scripts as `<python> <skill-dir>/scripts/<name>.py`. Needs numpy, scipy, Pillow, reportlab, pypdf and python-docx. If one is missing and there is no `.python` file, create a virtualenv (`python3 -m venv ~/.docyfy/venv`), run `~/.docyfy/venv/bin/pip install -r <skill-dir>/requirements.txt`, and write that interpreter path into `.python`. Do not use `--break-system-packages`. The image privacy scan also uses pytesseract and the tesseract program when they exist, and is skipped when they do not.
+Read `references/look.md` only when asked to change how the guide looks (colours, highlight style, fonts).
 
 ## Step 0. Resume or start
 
@@ -42,24 +34,12 @@ Then `progress.py init --ws W --app NAME --url URL [--accent "#RRGGBB"] [--logo 
 
 ## Step 2. Map the app once (cheap)
 
-Follow `references/capture.md` section "Discover modules". Use `read_page` with `filter: interactive` on the navigation menu, not screenshots. Write modules to state with `progress.py add-module`. Keep the list in menu order. Sub-pages belong to their module as features. For "whole software", show the user the module list in one short message and carry on unless they object.
+With `capture.py`, run `capture.py explore` on the home page and read the menu links from the text (no picture needed). With browser tools, follow `references/capture.md` section "Discover modules". Use `read_page` with `filter: interactive` on the navigation menu, not screenshots. Write modules to state with `progress.py add-module`. Keep the list in menu order. Sub-pages belong to their module as features. For "whole software", show the user the module list in one short message and carry on unless they object.
 
-## Step 3. Per-module loop
+## Step 3. Capture (one module at a time)
+Try `capture.py` first (below). **Browser-tool capture** (when `capture.py` cannot reach the app: SSO, captcha, app only on a private network, or Playwright missing). Read `references/browser-capture.md` for the per-module loop, then `references/capture.md` for tool tips.
 
-Repeat for each pending module. Do not hold more than one module in working memory.
-
-1. `progress.py next --ws W` prints the module slug and its feature list. Mark it `capturing`.
-2. **Capture** (references/capture.md): for each step, navigate, then take ONE screenshot at full size (`scale: 1`) and save it into `shots/`. Check the size the tool reports against the page width (`innerWidth`). The picture should be about 1:1 with the page, or text prints soft. The built-in browser caps pictures at 800 px wide, so set its window to about 800 px wide first (see capture.md). Never save a downscaled screenshot for the guide. If you only want to glance at a page, use a low `scale` without saving. Record each click target's box. Prefer boxes from `find`/`read_page` plus one `javascript_tool` call that returns `getBoundingClientRect()` for several elements at once; it is cheaper and more exact than eyeballing.
-3. **Reuse check before every capture**: `progress.py shot-get --ws W --key <key>`. Shared keys: `login`, `sidebar`, `search-box`, `filters`, `pagination`, `export-menu`, `delete-confirm`, `profile-menu`. If it exists, point the step at it, and do not capture again. After a new capture of a repeatable UI part, `shot-register` it.
-4. **Check, then annotate**: write the module JSON (see "Module JSON"), run `check_boxes.py --ws W --module S`, fix any ERROR and look at each WARN, then run `annotate.py`. The box check is cheap and catches wrong coordinates before they cost an image review. It skips images already annotated with the same marks. Spot-check at most one annotated image per module, at low scale.
-5. **Fingerprints and problems.** Right after each screenshot, run the snippet from `check_changes.py snippet` with `javascript_tool` and keep the short result. When the module is captured, store them all at once with `check_changes.py set-fp --ws W --module S --fps '{"0.0":"..","0.1":".."}'` (keys are featureIndex.stepIndex). On every form screen also run the form-fields snippet from capture.md and turn the result into the feature's `fields` table. While capturing, note exact error and validation messages you see (see capture.md) for the module's `problems` list.
-6. **GIF** (only if the user wanted them): references/capture.md section "GIFs". One GIF per feature, 3 to 6 actions.
-7. **Write text**: short, imperative, one action per step, naming the exact label on screen ("Click **Save**"). Use `common` entries from `assets/common.json` for generic steps instead of rewriting them.
-8. `build_pdf.py module --ws W --slug S` writes `build/S.pdf` and caches by content hash.
-9. **Self-check by eye.** Run `review_pages.py --ws W --module S`. It writes one contact-sheet image of every page. Open that one image (not each page) and go through the checklist it prints: outline on the right element, badges not cut off, nothing readable that should be blurred, no blurry pictures. If a page looks wrong, run `review_pages.py ... --page N` to see just that page at full size, fix the JSON or retake the shot, rebuild and look again. Only then run `progress.py set --ws W --module S --status built`.
-10. Move on. Do not re-read earlier modules.
-
-## Fast capture (use this first when it can reach the app)
+### Fast capture with capture.py
 `scripts/capture.py` drives the installed Google Chrome through Playwright on the same machine Claude's shell runs on. Pictures come out 2x sharp (2880 px for a 1440 px window), boxes are measured exactly, and an edited recording (spotlight, numbered mark, caption bar) is made while it runs, as a GIF and an MP4 in `gifs/`. It needs no round trip to Claude per click, so a task takes seconds instead of minutes. Use it when the app address opens from this machine (localhost, or a staging or demo link) and Playwright is installed (`<python> -c "import playwright"`). Otherwise use the browser-tool capture in Step 3 and `references/capture.md`.
 
 1. **Sign in once, by the person.** If the app needs a login, ask them to run `<python> <skill-dir>/scripts/capture.py login --url <app url> --out <ws>/.auth/state.json` in their own terminal, sign in in the window that opens, and close it. Never type or ask for their password yourself. The saved state stays in `<ws>/.auth` and is never part of the guide.
@@ -93,78 +73,14 @@ The reader is a shop clerk or accountant, not a developer. Every choice below se
 - Forms get a `fields` table so readers can see which boxes are required before they start.
 - Real client data is blurred. Sample data is obviously sample ("Sample Traders", 9999999999).
 
-## Fast mode
-The biggest win is `capture.py` (see Fast capture above), which removes the browser round trips. When it cannot reach the app and the browser tools are the only way, most of the time goes into driving the browser. Ways to cut it, in order of payoff:
-1. **Ask for scope.** Offer "main screens only": one screenshot per feature (the screen with its target marked) instead of one per click. Steps like "type your name" or "scroll down" need no picture. This alone halves the capture time.
-2. **Measure in one call.** For each screen, run one `javascript_tool` call that returns the boxes of every target at once. Do not hunt for elements with several `find` calls.
-3. **Batch the clicks.** When the steps for a screen are known, use `browser_batch` to click and screenshot in one round trip.
-4. **Reuse.** Login, sidebar, search, pagination and delete-confirm come from `assets/common.json`. Do not capture them again.
-5. **One module per helper.** When there are four or more modules and the person is happy to wait less, start one subagent per module. Each follows this file for its own module and writes only to `modules/<slug>.json` and `shots/`. Never let two helpers write `state.json` at the same time. Run the final build yourself.
-6. **Build last.** Capture and write all module JSON first, then run `annotate.py`, `build_pdf.py module` and `final` once. They cache, so a rerun only redraws what changed.
-
 ## Recordings and the PDF
 A PDF cannot play a GIF or a video, so never promise one inside it. Recordings (`gifs/*.gif`, `gifs/*.mp4`) live in the help site (`build_site.py`) and the one-page HTML. Ask where the help site will be hosted. If the person gives an address, run `progress.py init ... --site-url https://help.example.com` (or set `brand.site_url` in `state.json`). Every task that has a recording then gets a "Watch this as a short video" box in the PDF with that link and a QR code, so a reader with the printout can scan it. With no address the PDF shows nothing about the recording. The recordings are edited as they are made (spotlight, numbered mark, a cursor that glides to the target, a ripple on each click, caption bar, typing shown letter by letter), so they need no editing afterwards. Prefer the MP4 for chat apps and email, the GIF for web pages.
 
 ## Update mode (after a release)
-
-Use this when a guide already exists and the app has changed. Do not rebuild everything.
-
-1. `progress.py status` to see the built modules. Ask the user which modules changed, or check all.
-2. For each module: `check_changes.py list --ws W --module S` shows the step keys. Revisit each screen in the browser (same viewport size as the original capture), run the fingerprint snippet, collect results into one JSON object, then run `check_changes.py compare --ws W --module S --fps '{...}' --apply`. No screenshots are taken at this stage, so it is cheap.
-3. Changed steps are flagged stale and the module reopens (`progress.py next` returns it). Re-capture only those steps, re-measure boxes, update the step, then `check_changes.py set-fp` for them, which clears the flag.
-4. `annotate.py` redraws only changed images, `build_pdf.py module` rebuilds only reopened modules (and refuses to build while a step is stale), and `build_pdf.py final` merges again. Rerun `build_cheatsheet.py`, `build_docx.py` and `build_site.py` for any outputs the user has. Because `help_key`s stay the same, links from the app keep working.
-
-A changed fingerprint can be a false alarm (a heading with a record count, say). Re-capturing one extra step is cheap, so prefer a false alarm over a missed change. If a screen cannot be reached any more, set the module note and tell the user.
+**Update mode** (after a release). Read `references/update.md`.
 
 ## Module JSON
-
-`modules/<slug>.json`, written by you, read by `annotate.py` and `build_pdf.py`:
-
-```json
-{
-  "title": "Customers",
-  "intro": "Add, find and edit customer records.",
-  "viewport": [1440, 900],
-  "features": [
-    {
-      "title": "Add a customer",
-      "goal": "Create a new customer record.",
-      "gif": "gifs/customers-add.gif",
-      "steps": [
-        {"text": "Click **Customers** in the left menu.",
-         "image": "shots/customers-list.png",
-         "marks": [{"n": 1, "box": [24, 210, 180, 36], "style": "rect"}]},
-        {"common": "search-box"},
-        {"text": "Click **Add customer**, top right.",
-         "image": "shots/customers-list.png",
-         "marks": [{"n": 1, "box": [1210, 96, 150, 40], "style": "circle"}]},
-        {"text": "Fill the name and phone, then click **Save**.",
-         "image": "shots/customer-form.png",
-         "marks": [{"n": 1, "box": [420, 200, 520, 44]},
-                   {"n": 2, "box": [420, 260, 520, 44]},
-                   {"n": 3, "box": [860, 640, 110, 42], "style": "circle"}],
-         "tip": "Phone numbers need 10 digits."}
-      ]
-    }
-  ]
-}
-```
-
-- `box` is `[x, y, w, h]` in **viewport CSS pixels**, as the browser reports them. `annotate.py` scales to the image using `viewport`, so full-size and scaled screenshots both work.
-- `style`: `rect` (default, wobbly box), `circle` (loop around small buttons and icons), `underline`, `arrow`, `blur`.
-- `blur` pixelates a region and draws nothing else (leave out `n`). Use it on names, phone numbers, emails, addresses, amounts, GST/PAN numbers and anything else that looks like real client data. Real data in a guide that gets shared is a leak, so measure those boxes in the same JS call as the click targets and add a blur mark whenever such fields are visible.
-- Several marks on one image get badges 1, 2, 3, and the step text lists them in the same order. Keep to 4 marks per image; split the step otherwise.
-- `crop`: optional `[x, y, w, h]` per step, rarely needed. Leave it out so the guide shows the full screen. When set, the picture gets a locator map in a corner (see "Making it easy for readers"). Cheat sheet thumbnails are always zoomed this way because the cards are small.
-- `warning` (step): red caution box for destructive or irreversible actions. `tip` is the bone-coloured hint box.
-- `before` (feature): `{"menu": "Sales > Customers", "role": "Sales staff or an admin", "ready": ["Customer name", "10 digit phone number"]}`. Shown as a "Before you start" box above the steps (where it is in the menu, who is allowed, what to have ready). Write one for every form and for any task of 4 or more steps. Most failures come from missing access or missing information, not from not finding the button. Take the role from what you saw (menu items that were missing for a limited user) or the person's answer, never guess it.
-- `fields` (feature): `[{"name": "Customer name", "required": true, "help": "Full legal name as on the invoice.", "example": "Sample Traders"}]`. Rendered as a "Fields on this screen" table after the steps.
-- `cheatsheet` (module): `[{"want": "Add a new customer", "go": "Customers > **Add customer**"}]`. A two-column "I want to..." table at the top of the module; the main use is in `quick-start`.
-- `workflows` (module level, used in the `workflows` module): `[{"title": "Quote to payment", "goal": "...", "flow": [{"label": "Create quotation", "where": "Quotations > Add quotation", "note": "...", "link": "quotes/add-quotation"}]}]`. Drawn as a numbered flow diagram with a table below it.
-- `help_key` (feature or workflow): a stable name for the help link, for example `"customer-add"`. Without it the link comes from the title, so renaming the title would change the link. The app's "?" buttons use these, so tell the developer which keys exist (they are all in `help-map.json`).
-- `cheat` (feature): true for the features that go on the cheat sheet. `cheat_step` picks which step's picture is shown (default: the first with marks).
-- `fp`: page fingerprint stored by `check_changes.py set-fp`. Do not write it by hand.
-- `problems` (module level, optional): `[{"message": "Phone number must be 10 digits", "cause": "...", "fix": "..."}]`. Becomes a "Common problems" table at the end of the module, listed in the contents. Use only messages you actually saw on screen; never invent them.
-- `common`: pulls a step from the project's `common.json` (seeded from `assets/common.json`), including its shared screenshot if one is registered.
+**Module JSON.** Read `references/module-json.md` before writing or editing a module file by hand. `capture.py` writes it for you when you use a spec.
 
 ## Style rules for the text
 

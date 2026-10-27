@@ -26,6 +26,7 @@ the login command instead. Use sample data in fill values.
 import argparse, json, os, re, shutil, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 WRITE_ACTIONS = ("click", "fill", "select", "press")
 
 
@@ -187,14 +188,72 @@ def launch_ctx(p, spec, task_dir, video):
     return br, br.new_context(**kw)
 
 
-def to_gif(webm, out_gif, out_mp4):
+def make_frame(out_dir, vid_w, vid_h, title, dark=False):
+    """Window-style frame: soft backdrop, rounded window with a title bar and three dots, drop shadow.
+    Returns (background_png, mask_png, (x, y), (canvas_w, canvas_h)). The video is laid over the hole."""
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+    import theme
+    pad, bar, rad = 70, 44, 16
+    W, H = vid_w + 2 * pad, vid_h + bar + 2 * pad
+    W, H = W - W % 2, H - H % 2
+    bg = Image.new("RGB", (W, H), theme.hex_rgb(theme.PALETTE["bone"]))
+    sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(sh).rounded_rectangle([pad, pad + 14, pad + vid_w, pad + bar + vid_h + 14], rad, fill=(35, 31, 32, 85))
+    bg.paste(sh.filter(ImageFilter.GaussianBlur(26)), (0, 0), sh.filter(ImageFilter.GaussianBlur(26)))
+    d = ImageDraw.Draw(bg)
+    d.rounded_rectangle([pad, pad, pad + vid_w, pad + bar + vid_h], rad, fill=(246, 247, 249))
+    d.rounded_rectangle([pad, pad, pad + vid_w, pad + bar + rad], rad, fill=(236, 238, 241))
+    d.rectangle([pad, pad + bar - 1, pad + vid_w, pad + bar], fill=(214, 217, 222))
+    for i, c in enumerate(((255, 95, 87), (254, 188, 46), (40, 200, 64))):
+        cx = pad + 24 + i * 24
+        d.ellipse([cx - 7, pad + bar / 2 - 7, cx + 7, pad + bar / 2 + 7], fill=c)
+    try:
+        f = ImageFont.truetype(theme.font_path("semibold"), 15)
+        tw = d.textlength(title, font=f)
+        d.text((pad + vid_w / 2 - tw / 2, pad + bar / 2 - 9), title, font=f, fill=(95, 101, 113))
+    except Exception:
+        pass
+    mask = Image.new("L", (vid_w, vid_h), 255)
+    m = Image.new("L", (vid_w * 2, vid_h * 2), 0)
+    ImageDraw.Draw(m).rounded_rectangle([0, -rad * 4, vid_w * 2 - 1, vid_h * 2 - 1], rad * 2, fill=255)
+    mask = m.resize((vid_w, vid_h), Image.LANCZOS)
+    bgp, mp = os.path.join(out_dir, "frame-bg.png"), os.path.join(out_dir, "frame-mask.png")
+    bg.save(bgp)
+    mask.save(mp)
+    return bgp, mp, (pad, pad + bar), (W, H)
+
+
+def probe(path):
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
+                       capture_output=True, text=True)
+    w, h = r.stdout.strip().split(",")[:2]
+    return int(w), int(h)
+
+
+def to_gif(webm, out_gif, out_mp4, title="", framed=True):
+    """MP4 and GIF from the raw recording. Framed puts it in a window (title bar, rounded corners,
+    shadow) on a soft backdrop, so it looks like a polished screen recording."""
     if not shutil.which("ffmpeg"):
         return None
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", webm, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out_mp4], check=False)
+    work = os.path.dirname(webm)
+    if framed:
+        w, h = probe(webm)
+        w, h = w - w % 2, h - h % 2
+        bgp, mp, (x, y), (cw, ch) = make_frame(work, w, h, title)
+        dur = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", webm],
+                             capture_output=True, text=True).stdout.strip() or "30"
+        graph = (f"[0:v]scale={w}:{h},format=rgba[v];[2:v]format=gray[m];[v][m]alphamerge[vm];"
+                 f"[1:v][vm]overlay={x}:{y}:format=auto:shortest=1,format=yuv420p[out]")
+        inputs = ["-i", webm, "-loop", "1", "-framerate", "25", "-i", bgp, "-loop", "1", "-framerate", "25", "-i", mp]
+        mapping = ["-filter_complex", graph, "-map", "[out]", "-t", dur]
+    else:
+        inputs, mapping = ["-i", webm], ["-vf", "format=yuv420p"]
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *inputs, *mapping, "-c:v", "libx264", "-crf", "20",
+                    "-movflags", "+faststart", out_mp4], check=False)
     pal = out_gif + ".png"
     vf = "fps=15,scale=900:-1:flags=lanczos"
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", webm, "-vf", vf + ",palettegen=stats_mode=diff", pal], check=False)
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", webm, "-i", pal, "-lavfi", vf + "[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5", out_gif], check=False)
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", out_mp4, "-vf", vf + ",palettegen=stats_mode=diff", pal], check=False)
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", out_mp4, "-i", pal, "-lavfi", vf + "[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5", out_gif], check=False)
     try:
         os.remove(pal)
     except OSError:
@@ -303,7 +362,8 @@ def run_task(p, spec, ws, task, video, accent):
     ctx.close()
     br.close()
     if video and vpath and os.path.exists(vpath):
-        g = to_gif(vpath, os.path.join(gifs, f"{slug}.gif"), os.path.join(gifs, f"{slug}.mp4"))
+        g = to_gif(vpath, os.path.join(gifs, f"{slug}.gif"), os.path.join(gifs, f"{slug}.mp4"),
+                   title=spec.get("app") or task["title"], framed=spec.get("frame", True))
         if g:
             feat["gif"] = os.path.relpath(g, ws)
     shutil.rmtree(tmp, ignore_errors=True)
@@ -317,6 +377,8 @@ def cmd_run(a):
     accent = "#1C75BC"
     if os.path.exists(state_json):
         accent = ((json.load(open(state_json)).get("brand") or {}).get("accent")) or accent
+    if os.path.exists(state_json) and not spec.get("app"):
+        spec["app"] = json.load(open(state_json)).get("app") or ""
     if spec.get("state") and not os.path.isabs(spec["state"]):
         spec["state"] = os.path.join(ws, spec["state"])
     sp = pw()()
