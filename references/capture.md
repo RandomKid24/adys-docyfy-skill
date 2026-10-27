@@ -7,7 +7,7 @@ Open the app in a fresh tab. Keep the same tab and window size for the whole pro
 
 ## Token rules
 
-- Look with `computer` `screenshot` at `scale: 0.4` to 0.6. Use full scale only when the box coordinates must be verified.
+- Any screenshot that goes into the guide (`save_to_disk: true`) is taken at `scale: 1` with the window about 1440 px wide, so text stays sharp when printed. Only throwaway looks, which you do not save, may use `scale: 0.4` to 0.6. Crops are made later from the full-size file, so never pre-crop or shrink it.
 - Add `save_to_disk: true` only on the shot you will actually keep. Rename or move the saved file into `<ws>/shots/<name>.png` (the tool result gives the path).
 - Find targets with `find` or `read_page` (`filter: interactive`, `ref_id` to narrow). Do not scan whole pages in `all` mode.
 - Measure many targets in one call:
