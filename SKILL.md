@@ -7,6 +7,9 @@ description: Builds click-by-click user guides for web apps, whole app, modules 
 
 Make guides that tell a non-technical reader exactly where to click. Scripts do the capture, drawing and building. Read only the reference file for the step you are on.
 
+## Running scripts
+Scripts are in `scripts/` next to this file. Python is the single line in the `.python` file here if it exists, else `python3`. Run `<python> <skill-dir>/scripts/<name>.py`. If a package is missing and there is no `.python`, run `python3 -m venv ~/.docyfy/venv`, `~/.docyfy/venv/bin/pip install -r <skill-dir>/requirements.txt`, and write that interpreter path into `.python`. Never use `--break-system-packages`.
+
 ## Words after /docyfy
 `pdf` PDF and cheat sheets (capture with `--no-video`). `video` recordings only (skip `build_pdf.py`). `word` add `build_docx.py`. `site` add `build_site.py`. `all` everything. `draft|1080p|4k|8k` video quality, default 4k. `voice` narrated MP4. Words combine. A task or module name sets the scope. If words cover it, skip those intake questions. State what you will make in one line, then start.
 
