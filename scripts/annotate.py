@@ -86,6 +86,17 @@ def displace(mask, s, seed, amp=0.9, freq=30):
     line work is nudged by a smooth noise field, so edges waver a little and line widths vary."""
     import numpy as np
     from scipy.ndimage import gaussian_filter, map_coordinates, zoom
+    bb = mask.getbbox()
+    if not bb:
+        return mask
+    if mask.size[0] * mask.size[1] > 400_000 and not getattr(mask, "_sub", False):
+        pad = int(amp * s * 3) + 6          # only the drawn area needs the noise, the rest is empty
+        box = (max(0, bb[0] - pad), max(0, bb[1] - pad), min(mask.size[0], bb[2] + pad), min(mask.size[1], bb[3] + pad))
+        sub = mask.crop(box)
+        sub._sub = True
+        out = Image.new("L", mask.size, 0)
+        out.paste(displace(sub, s, seed, amp, freq), box[:2])
+        return out
     h, w = mask.size[1], mask.size[0]
     g = np.random.default_rng(seed)
     sigma = freq * s

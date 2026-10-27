@@ -81,6 +81,15 @@ The reader is a shop clerk or accountant, not a developer. Every choice below se
 - Forms get a `fields` table so readers can see which boxes are required before they start.
 - Real client data is blurred. Sample data is obviously sample ("Sample Traders", 9999999999).
 
+## Fast mode
+Most of the time goes into driving the browser, not into the scripts. Ways to cut it, in order of payoff:
+1. **Ask for scope.** Offer "main screens only": one screenshot per feature (the screen with its target marked) instead of one per click. Steps like "type your name" or "scroll down" need no picture. This alone halves the capture time.
+2. **Measure in one call.** For each screen, run one `javascript_tool` call that returns the boxes of every target at once. Do not hunt for elements with several `find` calls.
+3. **Batch the clicks.** When the steps for a screen are known, use `browser_batch` to click and screenshot in one round trip.
+4. **Reuse.** Login, sidebar, search, pagination and delete-confirm come from `assets/common.json`. Do not capture them again.
+5. **One module per helper.** When there are four or more modules and the person is happy to wait less, start one subagent per module. Each follows this file for its own module and writes only to `modules/<slug>.json` and `shots/`. Never let two helpers write `state.json` at the same time. Run the final build yourself.
+6. **Build last.** Capture and write all module JSON first, then run `annotate.py`, `build_pdf.py module` and `final` once. They cache, so a rerun only redraws what changed.
+
 ## Update mode (after a release)
 
 Use this when a guide already exists and the app has changed. Do not rebuild everything.
