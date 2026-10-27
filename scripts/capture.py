@@ -22,6 +22,10 @@ a click and no marks highlights the click target. "shot": true forces a picture.
 (names, phones, amounts). Marks are numbered 1, 2, 3 in order.
 Highlight in the video: "highlight": "auto" (default) shows only the caption when the cursor points at a click, fill
 or select target, and a soft ring (no dim) on look-only steps. "full" always spotlights with a number, "caption" never.
+Studio engine (default): captures sharp stills of each page state, then draws the cursor, zoom, captions, ripples
+and fades itself at 60 fps. "quality": "4k" (default, 3840x2160 at 60 fps) | "1080p" | "draft" (1080p at 30 fps, fast,
+use while checking) | "8k". "engine": "live" goes back to screen-recording the browser. On a Mac the hardware
+encoder is used when ffmpeg has it. DOCYFY_PRESET=fast|medium trades render time for smaller files.
 Look of the video: a title card and an end card ("cards": false removes them), a "Step 2 of 4" chip in the
 caption, and a smooth zoom toward each click target ("zoom": false removes it, "zoom_level": 1.3 sets how much).
 Voice: add "voice": true (or {"name": "Rishi", "rate": 170}) to the spec header and each step's text is read
@@ -30,7 +34,7 @@ else espeak-ng. Set DOCYFY_TTS_CMD='mytts "{text}" {out}' to use another engine.
 Safety: production is look-only (no click, fill, select, press). Password fields are never filled: sign in with
 the login command instead. Use sample data in fill values.
 """
-import argparse, json, os, re, shutil, subprocess, sys, time
+import argparse, json, math, os, re, shutil, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -224,11 +228,11 @@ def cmd_explore(a):
         br.close()
 
 
-def launch_ctx(p, spec, task_dir, video):
+def launch_ctx(p, spec, task_dir, video, dpr=2):
     br = launch(p)
     vw, vh = spec.get("viewport", [1440, 900])
     state = spec.get("state")
-    kw = dict(viewport={"width": vw, "height": vh}, device_scale_factor=2,
+    kw = dict(viewport={"width": vw, "height": vh}, device_scale_factor=dpr,
               storage_state=state if state and os.path.exists(state) else None)
     if video:
         kw.update(record_video_dir=task_dir, record_video_size={"width": min(vw, 1280), "height": int(min(vw, 1280) * vh / vw)})
@@ -400,6 +404,89 @@ def to_gif(webm, out_gif, out_mp4, title="", framed=True, clips=None, zooms=None
     return out_gif if os.path.exists(out_gif) else None
 
 
+def studio_step(S, page, st, i, n, action, tgt_box, boxes, text, audio, dsec, spec, look_only):
+    """One step in studio mode: advance the virtual clock, lay out caption, cursor, zoom and ring, and run the action."""
+    vw, vh = S.vw, S.vh
+    chip = f"Step {i} of {n}" if n > 1 else ""
+    read = max(min(2.6, 0.7 + 0.024 * len(text)), dsec + 0.35)
+    t_cap = S.t
+    if audio:
+        S.audio.append((audio, S.t + 0.15))
+    if boxes and (look_only or spec.get("highlight") == "full"):
+        for b in boxes:
+            S.rings.append((S.t + 0.25, S.t + read + 0.5, b))
+    S.t += read
+    if tgt_box is not None and action:
+        tx, ty = tgt_box[0] + tgt_box[2] / 2, tgt_box[1] + tgt_box[3] / 2
+        dist = math.hypot(tx - S.pos[0], ty - S.pos[1])
+        dur = 0.6 + min(0.7, dist / (vw * 1.3))
+        z_in = S.t
+        S.cursor.append((round(S.t, 3), round(S.t + dur, 3), S.pos[0], S.pos[1], tx, ty))
+        S.t += dur
+        S.pos = [tx, ty]
+        t_click = S.t
+        if action in ("click", "fill", "select"):
+            S.clicks.append(round(t_click, 3))
+        page.mouse.move(tx, ty)
+        hold_after = 0.6
+        if action == "click":
+            page.locator(st["click"]).first.click(timeout=8000)
+        elif action == "fill":
+            loc = page.locator(st["fill"][0]).first
+            loc.click()
+            loc.fill("")
+            val = st["fill"][1]
+            S.t = t_click + 0.25
+            step = max(1, math.ceil(len(val) / 28))
+            for k in range(0, len(val), step):
+                chunk = val[k:k + step]
+                page.keyboard.type(chunk)
+                S.t += 0.07 * len(chunk)
+                S.snap(page, S.t, fade=0.0)
+            t_click = S.t - 0.06
+        elif action == "select":
+            page.locator(st["select"][0]).first.select_option(st["select"][1])
+        elif action == "press":
+            page.keyboard.press(st["press"])
+        if "wait" in st:
+            w = st["wait"]
+            page.wait_for_timeout(w) if isinstance(w, int) else page.wait_for_selector(w, timeout=10000)
+        try:
+            page.wait_for_load_state("networkidle", timeout=4000)
+        except Exception:
+            pass
+        page.wait_for_timeout(250)
+        if action != "fill":
+            S.snap(page, t_click + 0.05, fade=0.18)
+        S.t = max(S.t, t_click + 0.05) + hold_after
+        if spec.get("zoom", True):
+            S.zooms.append((round(z_in, 3), round(S.t, 3), tx, ty))
+    elif action:
+        if action == "press":
+            page.keyboard.press(st["press"])
+        if "wait" in st:
+            w = st["wait"]
+            page.wait_for_timeout(w) if isinstance(w, int) else page.wait_for_selector(w, timeout=10000)
+        page.wait_for_timeout(250)
+        S.snap(page, S.t + 0.05, fade=0.18)
+        S.t += 0.6
+    else:
+        S.t += 0.3
+    S.captions.append((round(t_cap, 3), round(S.t + 0.15, 3), text, chip))
+
+
+def make_gif(mp4, out_gif):
+    pal = out_gif + ".png"
+    vf = "fps=15,scale=900:-1:flags=lanczos"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", mp4, "-vf", vf + ",palettegen=stats_mode=diff", pal], check=False)
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", mp4, "-i", pal, "-lavfi", vf + "[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5", out_gif], check=False)
+    try:
+        os.remove(pal)
+    except OSError:
+        pass
+    return out_gif if os.path.exists(out_gif) else None
+
+
 def run_task(p, spec, ws, task, video, accent):
     env = spec.get("env", "staging")
     base = spec.get("base", "").rstrip("/")
@@ -409,9 +496,17 @@ def run_task(p, spec, ws, task, video, accent):
     tmp = os.path.join(ws, "build", f"video-{slug}")
     for d in (shots, gifs, tmp):
         os.makedirs(d, exist_ok=True)
-    br, ctx = launch_ctx(p, spec, tmp, video)
-    page = ctx.new_page()
+    studio = bool(video and spec.get("engine", "studio") != "live" and shutil.which("ffmpeg"))
     vw, vh = spec.get("viewport", [1440, 900])
+    S = None
+    if studio:
+        import studio as studio_mod
+        S = studio_mod.Timeline(tmp, vw, vh, accent, spec.get("app") or task["title"], spec.get("quality", "4k"),
+                                float(spec.get("zoom_level", 1.3)) if spec.get("zoom", True) else 1.0)
+        br, ctx = launch_ctx(p, spec, tmp, False, dpr=S.dpr())
+    else:
+        br, ctx = launch_ctx(p, spec, tmp, video)
+    page = ctx.new_page()
     steps_out = []
     cur = [vw * 0.5, vh * 0.62]     # where the on-screen cursor is
     voice = spec.get("voice")
@@ -424,6 +519,9 @@ def run_task(p, spec, ws, task, video, accent):
         if "goto" in st:
             url = st["goto"] if st["goto"].startswith("http") else base + st["goto"]
             page.goto(url, wait_until="networkidle")
+            if S:
+                page.wait_for_timeout(300)
+                S.snap(page, S.t, fade=0.3)
         action = next((k for k in WRITE_ACTIONS if k in st), None)
         if env == "production" and action:
             die(f"{slug} step {i}: production is look-only, so '{action}' is not allowed. Use a staging or local copy.")
@@ -452,7 +550,21 @@ def run_task(p, spec, ws, task, video, accent):
             if st.get(k):
                 out[k] = st[k]
         tx = ty = None
-        if video:
+        if S:
+            if not S.stills:
+                S.snap(page, 0.0)
+            tgt = None
+            if action in ("click", "fill", "select"):
+                tgt = st[action][0] if isinstance(st[action], list) else st[action]
+            tb = None
+            if tgt:
+                tb = boxes[[m["target"] for m in marks_in].index(tgt)] if tgt in [m["target"] for m in marks_in] else box_of(page, tgt)
+            audio, dsec = None, 0.0
+            if voice:
+                audio = speak(plain(st["text"]), os.path.join(tmp, f"voice{i}"), vname, vrate)
+                dsec = audio_len(audio) if audio else 0.0
+            studio_step(S, page, st, i, len(task["steps"]), action, tb, boxes, plain(st["text"]), audio, dsec, spec, bool(boxes) and not tgt)
+        elif video:
             tgt = None
             if action in ("click", "fill", "select"):
                 tgt = st[action][0] if isinstance(st[action], list) else st[action]
@@ -483,7 +595,9 @@ def run_task(p, spec, ws, task, video, accent):
                 page.evaluate(RIPPLE_JS, [tx, ty, accent]) if action == "click" else None
                 page.wait_for_timeout(250)
                 cur[0], cur[1] = tx, ty
-        if action == "click":
+        if S:
+            pass
+        elif action == "click":
             page.locator(st["click"]).first.click(timeout=8000)
         elif action == "fill":
             if video:
@@ -497,6 +611,9 @@ def run_task(p, spec, ws, task, video, accent):
             page.locator(st["select"][0]).first.select_option(st["select"][1])
         elif action == "press":
             page.keyboard.press(st["press"])
+        if S:
+            steps_out.append(out)
+            continue
         if "wait" in st:
             w = st["wait"]
             page.wait_for_timeout(w) if isinstance(w, int) else page.wait_for_selector(w, timeout=10000)
@@ -520,10 +637,23 @@ def run_task(p, spec, ws, task, video, accent):
         feat["fields"] = task["fields"]
     if task.get("cheat", True):
         feat["cheat"] = True
-    vpath = page.video.path() if video else None
+    vpath = page.video.path() if (video and not S) else None
     ctx.close()
     br.close()
-    if video and vpath and os.path.exists(vpath):
+    if S:
+        W_, H_, _ = studio_mod.QUALITY[S.quality]
+        intro = outro = None
+        if spec.get("cards", True):
+            app = spec.get("app") or "User guide"
+            intro = (make_card(tmp, "intro.png", (W_, H_), task["title"], task.get("goal") or "", accent, app), 2.2)
+            outro = (make_card(tmp, "outro.png", (W_, H_), "That is it. You are done.", "More tasks are in the full guide.", accent, app), 1.8)
+        mp4 = os.path.join(gifs, f"{slug}.mp4")
+        print(f"rendering {slug} at {S.quality} ...", file=sys.stderr)
+        if S.render(mp4, intro, outro, voice_tail=0.2):
+            g = make_gif(mp4, os.path.join(gifs, f"{slug}.gif"))
+            if g:
+                feat["gif"] = os.path.relpath(g, ws)
+    elif video and vpath and os.path.exists(vpath):
         cards = None
         if spec.get("cards", True) and shutil.which("ffmpeg"):
             vwid = min(vw, 1280)

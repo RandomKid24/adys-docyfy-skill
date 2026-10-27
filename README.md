@@ -156,3 +156,7 @@ The cursor already shows where to click, so videos skip the dim and the numbered
 ### What a finished video has
 
 A title card with the task name and goal, then the recording in a Mac-style window. The view eases in toward each click target and back out, the cursor glides and ripples on the click, and the caption carries a "Step 2 of 4" chip. An end card closes it. The voice track, if on, starts after the title card. Turn pieces off in the spec with `"cards": false`, `"zoom": false` or `"highlight": "caption"`. `"zoom_level": 1.3` sets how close it gets.
+
+### Video quality
+
+Videos come from a studio renderer. It takes sharp stills of every page state, then draws the cursor, zoom, captions, click ripples and fades itself at 60 frames per second. That gives true 4K and perfectly even motion, which a live screen recording cannot. Set `"quality"` in the capture spec to `"4k"` (default), `"1080p"`, `"draft"` (1080p at 30 fps, renders in seconds, good for checking) or `"8k"` (slow, large files). `"engine": "live"` switches back to recording the browser as it runs. Rendering 4K takes a few minutes per task on a laptop, so use `draft` first and `4k` for the final pass.
