@@ -1,0 +1,34 @@
+{
+  "login": {
+    "text": "Open the app address in your browser. Enter your username and password on the sign-in page, then click **Sign in**.",
+    "tip": "Forgot your password? Use the reset link under the form or ask your administrator."
+  },
+  "logout": {
+    "text": "Click your name or avatar at the top right, then choose **Log out**."
+  },
+  "sidebar": {
+    "text": "Use the menu on the left to switch between modules. Click a module name to open it. Groups with an arrow expand to show more pages."
+  },
+  "search-box": {
+    "text": "Type part of a name or number in the **Search** box above the table. The list narrows as you type. Clear the box to see everything again."
+  },
+  "filters": {
+    "text": "Click **Filter** above the table, choose the values you want, then click **Apply**. Click **Reset** to remove all filters."
+  },
+  "pagination": {
+    "text": "Use the page numbers or the arrows at the bottom of the table to move between pages. The page-size box changes how many rows are shown."
+  },
+  "sort": {
+    "text": "Click a column heading to sort by it. Click it again to reverse the order."
+  },
+  "export-menu": {
+    "text": "Click **Export** above the table and choose a format such as Excel or PDF. The file downloads to your computer."
+  },
+  "delete-confirm": {
+    "text": "Click the delete icon on the row. A confirmation box appears. Read it, then click **Delete** to confirm or **Cancel** to keep the record.",
+    "tip": "Deleted records usually cannot be restored."
+  },
+  "profile-menu": {
+    "text": "Click your name or avatar at the top right to open account options such as profile, password and log out."
+  }
+}
