@@ -10,35 +10,52 @@ Highlights, workflow roads, fonts and colours follow the BeForth design system. 
 
 - Claude Code, or any Claude app that supports skills.
 - The Claude in Chrome extension, signed in and running. The skill uses it to open the app and take screenshots.
-- Python 3.9 or newer.
+- Python 3.9 or newer and Node 16 or newer.
 
 ## Install
 
-Pick one place for the skill.
+One command. It looks for the AI tools on your machine and copies the skill into each one, then installs the Python packages. You need Node 16 or newer.
 
-For every project on your machine:
+```bash
+npx github:RandomKid24/adys-docyfy-skill
+```
+
+It prints what it found and asks once before installing. Restart your AI tool afterwards.
+
+| Tool | Skills folder | Confidence |
+| --- | --- | --- |
+| Claude Code | `~/.claude/skills` | Documented |
+| OpenCode | `~/.config/opencode/skill` | Documented |
+| Codex CLI | `~/.codex/skills` | Best effort |
+| Gemini CLI | `~/.gemini/skills` | Best effort |
+| Cursor | `~/.cursor/skills` | Best effort |
+
+Best effort means the folder is my guess for that tool. If it does not pick the skill up, check the tool's docs for where skills go and use `--target`.
+
+Options:
+
+```bash
+npx github:RandomKid24/adys-docyfy-skill --yes          # no question, install everywhere found
+npx github:RandomKid24/adys-docyfy-skill --project      # only this project (./.claude/skills)
+npx github:RandomKid24/adys-docyfy-skill --tool claude  # one tool only
+npx github:RandomKid24/adys-docyfy-skill --target ~/my/skills   # any folder
+npx github:RandomKid24/adys-docyfy-skill --list         # show what it found, change nothing
+npx github:RandomKid24/adys-docyfy-skill --uninstall
+npx github:RandomKid24/adys-docyfy-skill --no-deps      # skip pip install
+```
+
+To update, run the same command again. It replaces the old copy.
+
+### Install by hand
 
 ```bash
 git clone https://github.com/RandomKid24/adys-docyfy-skill ~/.claude/skills/user-guide-builder
-```
-
-For one project only, so the team gets it through git:
-
-```bash
-git clone https://github.com/RandomKid24/adys-docyfy-skill your-project/.claude/skills/user-guide-builder
-```
-
-The folder name must be `user-guide-builder`. It matches the name in `SKILL.md`.
-
-Then install the Python packages:
-
-```bash
 pip install -r ~/.claude/skills/user-guide-builder/requirements.txt
 ```
 
-`pytesseract` is optional. It powers `check_guide.py --ocr`, which scans finished screenshots for readable personal data. It also needs the `tesseract` program (`apt install tesseract-ocr`, or `brew install tesseract`).
+The folder name must be `user-guide-builder`.
 
-Restart Claude Code. Type `/user-guide-builder` to confirm it shows up.
+`pytesseract` in the requirements is optional. It powers `check_guide.py --ocr`, which scans finished screenshots for readable personal data. It also needs the `tesseract` program (`apt install tesseract-ocr` or `brew install tesseract`).
 
 ## Use it
 

@@ -1,0 +1,10 @@
+{
+  "name": "adys-docyfy-skill",
+  "version": "1.0.0",
+  "description": "Installs the user-guide-builder skill into the AI tools on your machine",
+  "bin": { "adys-docyfy-skill": "bin/install.js" },
+  "files": ["bin", "SKILL.md", "README.md", "requirements.txt", "assets", "references", "scripts"],
+  "engines": { "node": ">=16" },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/RandomKid24/adys-docyfy-skill.git" }
+}
