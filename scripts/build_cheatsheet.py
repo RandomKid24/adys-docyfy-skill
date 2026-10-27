@@ -61,7 +61,7 @@ def focus_region(step, viewport, aspect):
     return [round(x0), round(y0), round(w), round(h)]
 
 
-def thumb(ws, step, viewport, aspect, accent):
+def thumb(ws, step, viewport, aspect, accent, style=None):
     """Redraw the highlights on the ORIGINAL screenshot, cropped to the focus region.
     Cropping the finished (already shrunk) picture made blurry thumbnails."""
     src = step.get("image")
@@ -76,10 +76,10 @@ def thumb(ws, step, viewport, aspect, accent):
         h = min(im.height, int(im.width / aspect))
         return im.crop((0, 0, im.width, h))
     import hashlib
-    key = hashlib.sha1((open(src, "rb").read().hex()[:2000] + json.dumps([marks, region, viewport, accent, ann.STYLE_VERSION])).encode()).hexdigest()[:16]
+    key = hashlib.sha1((open(src, "rb").read().hex()[:2000] + json.dumps([marks, region, viewport, accent, style, ann.STYLE_VERSION])).encode()).hexdigest()[:16]
     out = os.path.join(ws, "build", "thumbs", f"{key}.jpg")
     if not os.path.exists(out):
-        ann.annotate(src, marks, out, viewport, crop=region, max_w=1300, accent=accent)
+        ann.annotate(src, marks, out, viewport, crop=region, max_w=1300, accent=accent, style=style)
     return Image.open(out).convert("RGB")
 
 
@@ -144,7 +144,7 @@ def build_one(ws, slug, state, common):
         ty = y + card_h - 11 * mm - THUMB_H
         if idx is not None and idx < len(steps) and bp.step_image(steps[idx], ws):  # picture of the screen
             aspect = (CARD_W - 6 * mm) / THUMB_H
-            th = thumb(ws, steps[idx], mod.get("viewport"), aspect, (state.get("brand") or {}).get("accent") or None)
+            th = thumb(ws, steps[idx], mod.get("viewport"), aspect, (state.get("brand") or {}).get("accent") or None, (state.get("brand") or {}).get("style") or None)
             tw_mm = CARD_W - 6 * mm
             r = min(tw_mm / th.width, THUMB_H / th.height)
             dw, dh = th.width * r, th.height * r

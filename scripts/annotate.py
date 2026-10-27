@@ -15,12 +15,13 @@ viewport, accent and STYLE_VERSION, so unchanged steps are skipped and a style c
 redraws everything once.
 """
 import argparse, hashlib, json, math, os, random, sys
-from PIL import Image, ImageDraw, ImageFont
+from PIL import ImageFilter, Image, ImageDraw, ImageFont
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import theme
 
-STYLE_VERSION = "6"
+STYLE_VERSION = "7"
+CLEAN = True              # set per call by annotate(style=...); "clean" is the default, "sketch" is hand-drawn
 SS = 2                    # supersampling for smooth lines
 TAU = math.tau
 
@@ -58,6 +59,8 @@ def densify(pts, step):
 
 
 def wobble_pts(pts, rng, s, step=6, amp=1.5):
+    if CLEAN:
+        return [(x, y) for x, y, _ in densify(pts, step * s)]
     wx, wy = Wobble(rng, s, amp), Wobble(rng, s, amp)
     return [(x + wx(d), y + wy(d)) for x, y, d in densify(pts, step * s)]
 
@@ -70,8 +73,13 @@ def bezier(p0, p1, p2, n=40):
 def pen(d, pts, w, fill=255, taper=0.12, s=1.0):
     """One pen stroke as a run of round dabs. The width swells in the middle and thins to a point
     at both ends, with a faint pressure wobble, the way a pen line looks when drawn fast."""
-    dense = densify(pts, max(1.0, 1.4 * s))
+    dense = densify(pts, max(0.8, 0.3 * s))
     total = dense[-1][2] or 1.0
+    if CLEAN:
+        r = w / 2
+        for x, y, _ in dense:
+            d.ellipse([x - r, y - r, x + r, y + r], fill=fill)
+        return
     ramp = max(total * taper, 12 * s)
     for i, (x, y, dist) in enumerate(dense):
         f = min(1.0, dist / ramp, (total - dist) / ramp)
@@ -79,6 +87,25 @@ def pen(d, pts, w, fill=255, taper=0.12, s=1.0):
         ww = w * (0.28 + 0.72 * f) * (1 + 0.07 * math.sin(dist / (23 * s)))
         r = ww / 2
         d.ellipse([x - r, y - r, x + r, y + r], fill=fill)
+
+
+def draw_strokes(strokes, size, s, K=3):
+    """Draw pen strokes [(points, width)] into an L mask. Drawn K times larger and shrunk, so the
+    edges are smooth instead of beaded."""
+    mask = Image.new("L", size, 0)
+    if not strokes:
+        return mask
+    xs = [x for pts, _ in strokes for x, _ in pts]
+    ys = [y for pts, _ in strokes for _, y in pts]
+    m = max(w for _, w in strokes) + 6
+    ox, oy = max(0, int(min(xs) - m)), max(0, int(min(ys) - m))
+    ex, ey = min(size[0], int(max(xs) + m) + 1), min(size[1], int(max(ys) + m) + 1)
+    sub = Image.new("L", ((ex - ox) * K, (ey - oy) * K), 0)
+    dr = ImageDraw.Draw(sub)
+    for pts, w in strokes:
+        pen(dr, [((x - ox) * K, (y - oy) * K) for x, y in pts], w * K, 255, s=s * K)
+    mask.paste(sub.resize((ex - ox, ey - oy), Image.LANCZOS), (ox, oy))
+    return mask
 
 
 def displace(mask, s, seed, amp=0.9, freq=30):
@@ -131,6 +158,8 @@ def _rrect_loop(x0, y0, x1, y1, r, start_y=0.4, over=16.0, s=1.0):
     pts = [(x, y) for x, y, _ in dense]
     pts = pts[k:] + pts[1:k + 1]
     n_over = max(2, int(over * s / (2 * s)))
+    if CLEAN:
+        return pts
     tail = pts[1:1 + n_over]
     tail = [(x + 2.2 * s * (i / n_over), y) for i, (x, y) in enumerate(tail)]
     return pts + tail
@@ -144,7 +173,7 @@ def shape_rect(box, rng, s, pad=None):
     main = wobble_pts(_rrect_loop(x0, y0, x1, y1, r, rng.uniform(0.3, 0.55), s=s), rng, s, step=6, amp=0.7)
     j = 1.4 * s
     faint = wobble_pts(_rrect_loop(x0 - j, y0 - j * 0.6, x1 + j * 0.8, y1 + j, r, rng.uniform(0.6, 0.85), over=8, s=s), rng, s, step=6, amp=0.9)
-    return [main], (x0, y0, x1, y1), [faint], None
+    return [main], (x0, y0, x1, y1), ([] if CLEAN else [faint]), None
 
 
 def shape_circle(box, rng, s, pad=None):
@@ -165,9 +194,9 @@ def shape_circle(box, rng, s, pad=None):
         return wobble_pts(pts, rng, s, step=8, amp=amp)
 
     th0 = rng.uniform(-0.5, 0.5)       # start on the right side, away from labels above
-    main = loop(th0, 1.03, 0.025, 0.7)
+    main = loop(th0, 1.0 if CLEAN else 1.03, 0.0 if CLEAN else 0.025, 0.7)
     faint = loop(th0 + 0.35, 0.9, -0.02, 0.9)
-    return [main], (cx - rx * 1.03, cy - ry * 1.03, cx + rx * 1.03, cy + ry * 1.03), [faint], None
+    return [main], (cx - rx * 1.03, cy - ry * 1.03, cx + rx * 1.03, cy + ry * 1.03), ([] if CLEAN else [faint]), None
 
 
 def shape_underline(box, rng, s, pad=None):
@@ -176,7 +205,7 @@ def shape_underline(box, rng, s, pad=None):
     pts = [(x - 3 * s, yb), (x + w * 0.5, yb + 1.2 * s), (x + w + 4 * s, yb - 0.8 * s)]
     main = wobble_pts(pts, rng, s, step=8, amp=0.7)
     faint = wobble_pts([(px, py + 2.2 * s) for px, py in pts[:-1]] + [(pts[-1][0] - w * 0.15, pts[-1][1] + 2.2 * s)], rng, s, step=8, amp=0.9)
-    return [main], (x - 6 * s, yb - 4 * s, x + w + 8 * s, yb + 6 * s), [faint], None
+    return [main], (x - 6 * s, yb - 4 * s, x + w + 8 * s, yb + 6 * s), ([] if CLEAN else [faint]), None
 
 
 def shape_arrow(box, rng, s, size):
@@ -242,7 +271,9 @@ def draw_badge(d, c, n, r, s, accent, paper):
 
 
 # ---------- main drawing ----------
-def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, accent=None):
+def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, accent=None, style=None):
+    global CLEAN
+    CLEAN = (style or "clean") != "sketch"
     tk = theme.tokens({"brand": {"accent": accent}} if accent else None)
     ink, paper, acc = theme.hex_rgb(tk["ink"]), theme.hex_rgb(tk["paper"]), theme.hex_rgb(tk["accent"])
     im = Image.open(img_path).convert("RGB")
@@ -274,10 +305,7 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
 
     # 2. lines: paper halo, faint second pass and the main pen stroke are three masks,
     #    wobbled by the same noise, then painted on top of the screenshot
-    halo_mask = Image.new("L", big.size, 0)
-    faint_mask = Image.new("L", big.size, 0)
-    ink_mask = Image.new("L", big.size, 0)
-    dh, df, di = ImageDraw.Draw(halo_mask), ImageDraw.Draw(faint_mask), ImageDraw.Draw(ink_mask)
+    halo_strokes, ink_strokes, faint_strokes = [], [], []
     shapes = []   # (mark, bbox, tail)
     for m in marks:
         style = m.get("style", "rect")
@@ -294,17 +322,20 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
         else:
             parts, bb, faint, tail = shape_rect(box, rng, s)
         for pts in parts:
-            pen(dh, pts, w + 4.5 * s, 255, s=s)
-            pen(di, pts, w, 255, s=s)
+            halo_strokes.append((pts, w + (3.4 if CLEAN else 4.5) * s))
+            ink_strokes.append((pts, w))
         for pts in faint:
-            pen(df, pts, w * 0.5, 255, s=s)
+            faint_strokes.append((pts, w * 0.5))
         shapes.append((m, bb, tail))
+    halo_mask, ink_mask = (draw_strokes(st, big.size, s) for st in (halo_strokes, ink_strokes))
+    faint_mask = draw_strokes(faint_strokes, big.size, s)
     if any(sh[1] for sh in shapes):
-        halo_mask = displace(halo_mask, s, seed)
-        faint_mask = displace(faint_mask, s, seed + 1).point(lambda v: int(v * 0.26))
-        ink_mask = displace(ink_mask, s, seed)
+        if not CLEAN:   # sketch style: noise wobble and a faint second pass
+            halo_mask = displace(halo_mask, s, seed)
+            faint_mask = displace(faint_mask, s, seed + 1).point(lambda v: int(v * 0.26))
+            ink_mask = displace(ink_mask, s, seed)
+            big.paste(Image.new("RGB", big.size, ink), (0, 0), faint_mask)
         big.paste(Image.new("RGB", big.size, paper), (0, 0), halo_mask)
-        big.paste(Image.new("RGB", big.size, ink), (0, 0), faint_mask)
         big.paste(Image.new("RGB", big.size, ink), (0, 0), ink_mask)
         d = ImageDraw.Draw(big)
 
@@ -337,11 +368,11 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
     out.save(out_path, "JPEG", quality=95, subsampling=0, optimize=True)
 
 
-def key_for(img_path, marks, viewport, crop, accent):
+def key_for(img_path, marks, viewport, crop, accent, style=None):
     h = hashlib.sha1()
     with open(img_path, "rb") as f:
         h.update(f.read())
-    h.update(json.dumps([marks, viewport, crop, accent, STYLE_VERSION], sort_keys=True).encode())
+    h.update(json.dumps([marks, viewport, crop, accent, style or 'clean', STYLE_VERSION], sort_keys=True).encode())
     return h.hexdigest()[:16]
 
 
@@ -351,12 +382,13 @@ def run_module(ws, slug):
         mod = json.load(f)
     viewport = mod.get("viewport")
     made = reused = 0
-    shots, accent = {}, None
+    shots, accent, style = {}, None, None
     sp = os.path.join(ws, "state.json")
     if os.path.exists(sp):
         st = json.load(open(sp))
         shots = st.get("shots", {})
         accent = (st.get("brand") or {}).get("accent") or None
+        style = (st.get("brand") or {}).get("style") or None
     for feat in mod.get("features", []):
         for step in feat.get("steps", []):
             step_img = step.get("image")
@@ -381,12 +413,12 @@ def run_module(ws, slug):
             if not marks and not crop:
                 step["annotated"] = os.path.relpath(src, ws)
                 continue
-            k = key_for(src, marks, viewport, crop, accent)
+            k = key_for(src, marks, viewport, crop, accent, style)
             out = os.path.join(ws, "annotated", f"{k}.jpg")
             if os.path.exists(out):
                 reused += 1
             else:
-                annotate(src, marks, out, viewport, crop, accent=accent)
+                annotate(src, marks, out, viewport, crop, accent=accent, style=style)
                 made += 1
             step["annotated"] = os.path.relpath(out, ws)
     with open(mp, "w") as f:
@@ -404,11 +436,12 @@ def main():
     p.add_argument("--viewport", nargs=2, type=float)
     p.add_argument("--crop", nargs=4, type=float)
     p.add_argument("--accent")
+    p.add_argument("--style", choices=["clean", "sketch"], default=None)
     a = p.parse_args()
     if a.ws and a.module:
         run_module(a.ws, a.module)
     elif a.image and a.out and a.marks:
-        annotate(a.image, json.loads(a.marks), a.out, a.viewport, a.crop, accent=a.accent)
+        annotate(a.image, json.loads(a.marks), a.out, a.viewport, a.crop, accent=a.accent, style=a.style)
         print(a.out)
     else:
         p.error("give --ws and --module, or --image --out --marks")
