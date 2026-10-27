@@ -38,7 +38,7 @@ if (has("-h") || has("--help")) {
   --tool <id>       only this tool: ${TOOLS.map((t) => t.id).join(", ")}
   --list            show what was found, install nothing
   --uninstall       remove the skill from the places it is installed
-  --no-deps         skip the pip install step
+  --no-deps         skip creating the Python virtualenv
 `);
   process.exit(0);
 }
@@ -62,8 +62,11 @@ function copyDir(from, to) {
 
 function install(dir) {
   const dest = path.join(dir, NAME);
+  const keep = path.join(dest, ".python");
+  const py = fs.existsSync(keep) ? fs.readFileSync(keep, "utf8") : null;
   fs.rmSync(dest, { recursive: true, force: true });
   fs.mkdirSync(dest, { recursive: true });
+  if (py) fs.writeFileSync(keep, py);
   for (const f of COPY) {
     const a = path.join(SRC, f), b = path.join(dest, f);
     if (!fs.existsSync(a)) continue;
@@ -77,18 +80,31 @@ function ask(q) {
   return new Promise((res) => rl.question(q, (a) => { rl.close(); res(a.trim().toLowerCase()); }));
 }
 
+// Packages go into their own virtualenv (~/.docyfy/venv). Homebrew and recent Linux
+// Pythons refuse global pip installs (PEP 668), and a venv never touches the system.
+function venvPython(root) {
+  return process.platform === "win32" ? path.join(root, "Scripts", "python.exe") : path.join(root, "bin", "python");
+}
+
 function pythonDeps() {
+  const req = path.join(SRC, "requirements.txt");
+  const root = path.join(home, ".docyfy", "venv");
   for (const py of ["python3", "python"]) {
-    const ok = spawnSync(py, ["--version"], { stdio: "ignore" });
-    if (ok.status !== 0) continue;
-    const req = path.join(SRC, "requirements.txt");
-    const base = ["-m", "pip", "install", "-q", "-r", req];
-    let r = spawnSync(py, base, { stdio: "inherit" });
-    if (r.status !== 0) r = spawnSync(py, [...base, "--user", "--break-system-packages"], { stdio: "inherit" });
-    return r.status === 0;
+    if (spawnSync(py, ["--version"], { stdio: "ignore" }).status !== 0) continue;
+    if (!fs.existsSync(venvPython(root))) {
+      fs.mkdirSync(path.dirname(root), { recursive: true });
+      const v = spawnSync(py, ["-m", "venv", root], { stdio: "inherit" });
+      if (v.status !== 0) {
+        console.log("Could not create a virtualenv. On Debian or Ubuntu run: sudo apt install python3-venv");
+        return null;
+      }
+    }
+    const vp = venvPython(root);
+    const r = spawnSync(vp, ["-m", "pip", "install", "-q", "--disable-pip-version-check", "-r", req], { stdio: "inherit" });
+    return r.status === 0 ? vp : null;
   }
-  console.log("Python 3 not found. Install it, then run: pip install -r requirements.txt");
-  return false;
+  console.log("Python 3 not found. Install Python 3, then run this installer again.");
+  return null;
 }
 
 (async () => {
@@ -118,8 +134,17 @@ function pythonDeps() {
     catch (e) { console.log(`Could not install for ${t.label}: ${e.message}`); }
   }
   if (!has("--no-deps")) {
-    console.log("\nInstalling Python packages...");
-    if (!pythonDeps()) console.log("Packages not installed. Run: pip install -r requirements.txt (path above)");
+    console.log("\nInstalling Python packages into ~/.docyfy/venv ...");
+    const vp = pythonDeps();
+    if (vp) {
+      for (const t of found) {
+        const d = path.join(t.dir, NAME);
+        if (fs.existsSync(d)) fs.writeFileSync(path.join(d, ".python"), vp + "\n");
+      }
+      console.log(`Python ready: ${vp}`);
+    } else {
+      console.log("Packages not installed. Fix the error above and run the installer again.");
+    }
   }
   console.log(`\nDone. Restart your AI tool, then ask it: "make a user guide for my app at http://localhost:3000".
 You also need the Claude in Chrome extension for screenshots.`);

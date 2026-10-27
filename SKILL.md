@@ -16,7 +16,7 @@ The job is large (dozens of screens), so the whole design aims at spending few t
 - Everything is saved to a workspace folder. `progress.py` is the memory. Read its short `status` output, not the files.
 - Screenshots and wording that repeat (login, search box, pagination, delete confirm) are captured or written once and reused.
 
-Scripts live in `scripts/` next to this file. Run them with `python3 <skill-dir>/scripts/<name>.py`. Needs Pillow, reportlab, pypdf, and python-docx for the Word export (`pip install --break-system-packages pillow reportlab pypdf python-docx` if missing). The image privacy scan also uses pytesseract and the tesseract program when they exist, and is skipped when they do not.
+Scripts live in `scripts/` next to this file. Python: if the file `.python` exists next to this SKILL.md, its single line is the interpreter to use (the installer made a virtualenv with every package). Otherwise use `python3`. Run scripts as `<python> <skill-dir>/scripts/<name>.py`. Needs numpy, scipy, Pillow, reportlab, pypdf and python-docx. If one is missing and there is no `.python` file, create a virtualenv (`python3 -m venv ~/.docyfy/venv`), run `~/.docyfy/venv/bin/pip install -r <skill-dir>/requirements.txt`, and write that interpreter path into `.python`. Do not use `--break-system-packages`. The image privacy scan also uses pytesseract and the tesseract program when they exist, and is skipped when they do not.
 
 ## Step 0. Resume or start
 

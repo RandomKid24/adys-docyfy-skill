@@ -14,7 +14,7 @@ Highlights, workflow roads, fonts and colours follow the BeForth design system. 
 
 ## Install
 
-One command. It looks for the AI tools on your machine and copies the skill into each one, then installs the Python packages. You need Node 16 or newer.
+One command. It looks for the AI tools on your machine and copies the skill into each one, then installs the Python packages into their own virtualenv at `~/.docyfy/venv`, so your system Python stays untouched. You need Node 16 or newer.
 
 ```bash
 npx github:RandomKid24/adys-docyfy-skill
@@ -41,7 +41,7 @@ npx github:RandomKid24/adys-docyfy-skill --tool claude  # one tool only
 npx github:RandomKid24/adys-docyfy-skill --target ~/my/skills   # any folder
 npx github:RandomKid24/adys-docyfy-skill --list         # show what it found, change nothing
 npx github:RandomKid24/adys-docyfy-skill --uninstall
-npx github:RandomKid24/adys-docyfy-skill --no-deps      # skip pip install
+npx github:RandomKid24/adys-docyfy-skill --no-deps      # skip the Python virtualenv
 ```
 
 To update, run the same command again. It replaces the old copy.
@@ -50,7 +50,9 @@ To update, run the same command again. It replaces the old copy.
 
 ```bash
 git clone https://github.com/RandomKid24/adys-docyfy-skill ~/.claude/skills/docyfy
-pip install -r ~/.claude/skills/docyfy/requirements.txt
+python3 -m venv ~/.docyfy/venv
+~/.docyfy/venv/bin/pip install -r ~/.claude/skills/docyfy/requirements.txt
+echo ~/.docyfy/venv/bin/python > ~/.claude/skills/docyfy/.python
 ```
 
 The folder name must be `docyfy`.
