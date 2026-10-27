@@ -134,25 +134,46 @@ RIPPLE_JS = """([x, y, accent]) => {
 }"""
 
 
-def speak(text, out_base, voice=None, rate=170):
-    """Turn a sentence into a sound file with the computer's own voice. macOS `say` (the Indian English
-    voice Rishi when available), then espeak-ng or espeak. DOCYFY_TTS_CMD can override it:
-    a command with {text} and {out}. Returns the file path, or None when no voice is available."""
-    out = out_base + ".wav"
+EDGE_VOICES = {"en": "en-IN-NeerjaNeural", "hi": "hi-IN-SwaraNeural", "mr": "mr-IN-AarohiNeural"}
+SAY_VOICES = {"en": "Rishi", "hi": "Lekha", "mr": "Lekha"}      # macOS has no Marathi voice; Lekha reads Devanagari
+ESPEAK_LANG = {"en": "en-in", "hi": "hi", "mr": "mr"}
+_edge_broken = []
+
+
+def speak(text, out_base, voice=None, rate=170, lang="en"):
+    """Turn a sentence into a sound file. Order: DOCYFY_TTS_CMD, then Microsoft neural voices through the
+    edge-tts package (best for Hindi and Marathi, needs internet), then macOS `say`, then espeak-ng.
+    Returns the file path, or None when no voice is available."""
     custom = os.environ.get("DOCYFY_TTS_CMD")
+    out = out_base + ".wav"
     try:
         if custom:
-            subprocess.run(custom.format(text=text.replace('"', ""), out=out), shell=True, check=True, capture_output=True)
-        elif shutil.which("say"):
-            out = out_base + ".aiff"
-            for v in ([voice] if voice else ["Rishi", None]):
-                cmd = ["say", "-r", str(rate), "-o", out] + (["-v", v] if v else []) + [text]
-                if subprocess.run(cmd, capture_output=True).returncode == 0:
-                    break
-        elif shutil.which("espeak-ng") or shutil.which("espeak"):
-            subprocess.run([shutil.which("espeak-ng") or shutil.which("espeak"), "-s", str(rate), "-w", out, text], check=True, capture_output=True)
+            subprocess.run(custom.format(text=text.replace('"', ""), out=out, lang=lang), shell=True, check=True, capture_output=True)
         else:
-            return None
+            out = None
+            if not _edge_broken:
+                try:
+                    import asyncio, edge_tts
+                    name = voice if isinstance(voice, str) and "Neural" in voice else EDGE_VOICES.get(lang, EDGE_VOICES["en"])
+                    mp3 = out_base + ".mp3"
+                    asyncio.run(asyncio.wait_for(edge_tts.Communicate(text, name).save(mp3), 25))
+                    if os.path.exists(mp3) and os.path.getsize(mp3) > 500:
+                        out = mp3
+                except Exception:
+                    _edge_broken.append(1)             # offline or not installed, do not retry every step
+            if out is None and shutil.which("say"):
+                out = out_base + ".aiff"
+                names = [voice] if voice and "Neural" not in str(voice) else [SAY_VOICES.get(lang, "Rishi"), None]
+                for v in names:
+                    cmd = ["say", "-r", str(rate), "-o", out] + (["-v", v] if v else []) + [text]
+                    if subprocess.run(cmd, capture_output=True).returncode == 0:
+                        break
+            elif out is None and (shutil.which("espeak-ng") or shutil.which("espeak")):
+                out = out_base + ".wav"
+                subprocess.run([shutil.which("espeak-ng") or shutil.which("espeak"), "-v", ESPEAK_LANG.get(lang, "en-in"), "-s", str(rate), "-w", out, text],
+                               check=True, capture_output=True)
+            if out is None:
+                return None
     except Exception:
         return None
     return out if os.path.exists(out) and os.path.getsize(out) > 500 else None
@@ -299,14 +320,14 @@ def zoom_expr(zooms, w, h, zmax, ramp=0.55, fps=25):
 
 def make_card(out_dir, name, size, headline, sub, accent, kicker):
     """Title or end card in the BeForth look: paper background, ink headline, accent bar."""
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
     import theme
     W, H = size
     img = Image.new("RGB", (W, H), theme.hex_rgb(theme.PALETTE["paper"]))
     d = ImageDraw.Draw(img)
-    big = ImageFont.truetype(theme.font_path("bold"), int(H * 0.075))
-    mid = ImageFont.truetype(theme.font_path("regular"), int(H * 0.034))
-    small = ImageFont.truetype(theme.font_path("semibold"), int(H * 0.026))
+    big = theme.font_for(headline, int(H * 0.075), "bold")
+    mid = theme.font_for(sub, int(H * 0.034), "regular")
+    small = theme.font_for(kicker, int(H * 0.026), "semibold")
     x = int(W * 0.1)
     words, lines, cur = headline.split(), [], ""
     for wd in words:
@@ -404,14 +425,63 @@ def to_gif(webm, out_gif, out_mp4, title="", framed=True, clips=None, zooms=None
     return out_gif if os.path.exists(out_gif) else None
 
 
-def studio_step(S, page, st, i, n, action, tgt_box, boxes, text, audio, dsec, spec, look_only):
+DD_JS = """(el, [value, hi, accent]) => {
+  document.getElementById('__dd')?.remove();
+  if (el.tagName !== 'SELECT') return null;
+  const opts = [...el.options];
+  let idx = opts.findIndex(o => o.value === value || o.text.trim() === value);
+  if (idx < 0) idx = Math.max(0, el.selectedIndex);
+  const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+  const fs = Math.max(14, parseFloat(cs.fontSize) || 14), rh = Math.round(fs * 2.3), maxRows = 7;
+  const start = Math.max(0, Math.min(idx - 2, opts.length - maxRows)), end = Math.min(opts.length, start + maxRows);
+  const h = (end - start) * rh + 12, below = innerHeight - r.bottom;
+  const top = below > h + 8 ? r.bottom + 4 : Math.max(4, r.top - h - 4);
+  const box = document.createElement('div'); box.id = '__dd';
+  box.style.cssText = `position:fixed;z-index:2147483645;pointer-events:none;left:${r.left}px;top:${top}px;min-width:${Math.max(r.width, 160)}px;` +
+    `padding:6px;background:#fff;border:1px solid rgba(0,0,0,.14);border-radius:10px;box-sizing:border-box;` +
+    `box-shadow:0 10px 30px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.08);font:${cs.fontWeight} ${fs}px ${cs.fontFamily};color:#1d1d1f`;
+  const rows = [];
+  for (let i = start; i < end; i++) {
+    const d = document.createElement('div');
+    d.textContent = opts[i].text.trim() || ' ';
+    const on = hi && i === idx;
+    d.style.cssText = `height:${rh}px;line-height:${rh}px;padding:0 12px;border-radius:6px;white-space:nowrap;` + (on ? `background:${accent};color:#fff` : '');
+    box.appendChild(d); rows.push(d);
+  }
+  document.body.appendChild(box);
+  const rects = rows.map(d => { const q = d.getBoundingClientRect(); return [q.left, q.top, q.width, q.height]; });
+  return {rows: rects, row: idx - start, label: opts[idx] ? opts[idx].text.trim() : ''};
+}"""
+
+
+def dd_open(page, target, value, accent, hi):
+    """Draw an open dropdown under a native <select>, which the browser would not show in a screenshot.
+    Returns the row boxes, or None for anything that is not a native select."""
+    try:
+        return page.locator(target).first.evaluate(DD_JS, [value, hi, accent])
+    except Exception:
+        return None
+
+
+def dd_close(page):
+    page.evaluate("document.getElementById('__dd')?.remove()")
+
+
+CHIP = {"en": "Step {i} of {n}", "hi": "चरण {i} / {n}", "mr": "पायरी {i} / {n}"}
+OUTRO = {"en": ("That is it. You are done.", "More tasks are in the full guide."),
+         "hi": ("बस, हो गया।", "और काम पूरी गाइड में देखें।"),
+         "mr": ("झालं, काम पूर्ण।", "आणखी कामे पूर्ण मार्गदर्शकात पाहा।")}
+
+
+def studio_step(S, page, st, i, n, action, tgt_box, boxes, texts, audios, dsec, spec, look_only):
     """One step in studio mode: advance the virtual clock, lay out caption, cursor, zoom and ring, and run the action."""
     vw = S.vw
-    chip = f"Step {i} of {n}" if n > 1 else ""
-    read = max(min(2.6, 0.7 + 0.024 * len(text)), dsec + 0.35)
+    chips = {l: CHIP.get(l, CHIP["en"]).format(i=i, n=n) if n > 1 else "" for l in texts}
+    read = max(min(2.6, 0.7 + 0.024 * max(len(t) for t in texts.values())), dsec + 0.35)
     t_cap = S.t
-    if audio:
-        S.audio.append((audio, S.t + 0.15))
+    cap_end = None
+    for lg, a in audios.items():
+        S.audio.append((a, S.t + 0.15, lg))
     if boxes and (look_only or spec.get("highlight") == "full"):
         for b in boxes:
             S.rings.append((S.t + 0.25, S.t + read + 0.5, b))
@@ -421,6 +491,7 @@ def studio_step(S, page, st, i, n, action, tgt_box, boxes, text, audio, dsec, sp
         dist = math.hypot(tx - S.pos[0], ty - S.pos[1])
         dur = 0.6 + min(0.7, dist / (vw * 1.3))
         z_in = S.t
+        cap_end = z_in + 0.3          # the sentence is done once the cursor moves; keeps the caption off open lists
         S.cursor.append((round(S.t, 3), round(S.t + dur, 3), S.pos[0], S.pos[1], tx, ty))
         S.t += dur
         S.pos = [tx, ty]
@@ -429,7 +500,25 @@ def studio_step(S, page, st, i, n, action, tgt_box, boxes, text, audio, dsec, sp
             S.clicks.append(round(t_click, 3))
         page.mouse.move(tx, ty)
         hold_after = 0.6
-        if action == "click":
+        dd = dd_open(page, st["select"][0], st["select"][1], S.accent, False) if action == "select" and isinstance(st["select"], list) else None
+        if dd:
+            # native dropdown: show the list opening, glide to the option, highlight it, click it
+            S.snap(page, t_click + 0.05, fade=0.15)
+            row = dd["rows"][dd["row"]]
+            rx, ry = row[0] + min(row[2] * 0.4, 90), row[1] + row[3] / 2
+            S.t = t_click + 0.45
+            S.cursor.append((round(S.t, 3), round(S.t + 0.55, 3), tx, ty, rx, ry))
+            S.t += 0.55
+            S.pos = [rx, ry]
+            dd_open(page, st["select"][0], st["select"][1], S.accent, True)
+            S.snap(page, S.t, fade=0.1)
+            S.t += 0.3
+            S.clicks.append(round(S.t, 3))
+            page.locator(st["select"][0]).first.select_option(st["select"][1])
+            dd_close(page)
+            t_click = S.t
+            ty = (ty + ry) / 2
+        elif action == "click":
             page.locator(st["click"]).first.click(timeout=8000)
         elif action == "fill":
             loc = page.locator(st["fill"][0]).first
@@ -472,7 +561,7 @@ def studio_step(S, page, st, i, n, action, tgt_box, boxes, text, audio, dsec, sp
         S.t += 0.6
     else:
         S.t += 0.3
-    S.captions.append((round(t_cap, 3), round(S.t + 0.15, 3), text, chip))
+    S.captions.append((round(t_cap, 3), round(cap_end if cap_end else S.t + 0.15, 3), texts, chips))
 
 
 def make_gif(mp4, out_gif):
@@ -512,6 +601,8 @@ def run_task(p, spec, ws, task, video, accent):
     voice = spec.get("voice")
     vname = voice.get("name") if isinstance(voice, dict) else None
     vrate = int(voice.get("rate", 170)) if isinstance(voice, dict) else 170
+    vnames = {"en": vname, **((voice.get("voices") or {}) if isinstance(voice, dict) else {})}
+    langs = [l for l in (spec.get("langs") or ["en"])]
     zooms, zin = [], None
     vid_sc = min(vw, 1280) / vw
     clips, t0 = [], time.time()     # narration clips with their start time in the recording
@@ -541,9 +632,15 @@ def run_task(p, spec, ws, task, video, accent):
                 boxes.append(box_of(page, m["target"]))
             blur_boxes = [box_of(page, t) for t in st.get("blur", [])]
             png = os.path.join(shots, f"{slug}-{i}.png")
-            page.screenshot(path=png)
+            dd = dd_open(page, st["select"][0], st["select"][1], accent, True) if action == "select" and isinstance(st["select"], list) else None
+            page.screenshot(path=png)      # a native select list is drawn by us, the browser would not show it
+            if dd:
+                dd_close(page)
+                if len(marks_in) < 2:
+                    marks_in.append({"target": "(option)", "style": "rect", "pad": 1.5})
+                    boxes.append(dd["rows"][dd["row"]])
             out["image"] = os.path.relpath(png, ws)
-            marks = [{"n": n + 1, "box": b, "style": m.get("style", "rect")} for n, (m, b) in enumerate(zip(marks_in, boxes))]
+            marks = [{"n": n + 1, "box": b, "style": m.get("style", "rect"), **({"pad": m["pad"]} if "pad" in m else {})} for n, (m, b) in enumerate(zip(marks_in, boxes))]
             marks += [{"box": b, "style": "blur"} for b in blur_boxes]
             out["marks"] = marks
         for k in ("tip", "warning"):
@@ -559,11 +656,19 @@ def run_task(p, spec, ws, task, video, accent):
             tb = None
             if tgt:
                 tb = boxes[[m["target"] for m in marks_in].index(tgt)] if tgt in [m["target"] for m in marks_in] else box_of(page, tgt)
-            audio, dsec = None, 0.0
+            texts = {"en": plain(st["text"])}
+            for lg in langs:
+                texts[lg] = plain((st.get("i18n") or {}).get(lg) or st["text"])
+            audios, dsec = {}, 0.0
             if voice:
-                audio = speak(plain(st["text"]), os.path.join(tmp, f"voice{i}"), vname, vrate)
-                dsec = audio_len(audio) if audio else 0.0
-            studio_step(S, page, st, i, len(task["steps"]), action, tb, boxes, plain(st["text"]), audio, dsec, spec, bool(boxes) and not tgt)
+                for lg, tx_ in texts.items():
+                    if lg != "en" and lg not in langs:
+                        continue
+                    a = speak(tx_, os.path.join(tmp, f"voice{i}-{lg}"), vnames.get(lg), vrate, lg)
+                    if a:
+                        audios[lg] = a
+                        dsec = max(dsec, audio_len(a))
+            studio_step(S, page, st, i, len(task["steps"]), action, tb, boxes, texts, audios, dsec, spec, bool(boxes) and not tgt)
         elif video:
             tgt = None
             if action in ("click", "fill", "select"):
@@ -642,17 +747,21 @@ def run_task(p, spec, ws, task, video, accent):
     br.close()
     if S:
         W_, H_, _ = studio_mod.QUALITY[S.quality]
-        intro = outro = None
-        if spec.get("cards", True):
-            app = spec.get("app") or "User guide"
-            intro = (make_card(tmp, "intro.png", (W_, H_), task["title"], task.get("goal") or "", accent, app), 2.2)
-            outro = (make_card(tmp, "outro.png", (W_, H_), "That is it. You are done.", "More tasks are in the full guide.", accent, app), 1.8)
-        mp4 = os.path.join(gifs, f"{slug}.mp4")
-        print(f"rendering {slug} at {S.quality} ...", file=sys.stderr)
-        if S.render(mp4, intro, outro, voice_tail=0.2):
-            g = make_gif(mp4, os.path.join(gifs, f"{slug}.gif"))
-            if g:
-                feat["gif"] = os.path.relpath(g, ws)
+        app = spec.get("app") or "User guide"
+        for n_, lg in enumerate(langs):
+            intro = outro = None
+            if spec.get("cards", True):
+                ti = (task.get("i18n") or {}).get(lg) or {}
+                o1, o2 = OUTRO.get(lg, OUTRO["en"])
+                intro = (make_card(tmp, f"intro-{lg}.png", (W_, H_), ti.get("title") or task["title"], ti.get("goal") or task.get("goal") or "", accent, app), 2.2)
+                outro = (make_card(tmp, f"outro-{lg}.png", (W_, H_), o1, o2, accent, app), 1.8)
+            name = slug if n_ == 0 else f"{slug}.{lg}"
+            mp4 = os.path.join(gifs, f"{name}.mp4")
+            print(f"rendering {name} ({lg}) at {S.quality} ...", file=sys.stderr)
+            if S.render(mp4, intro, outro, voice_tail=0.2, lang=lg):
+                g = make_gif(mp4, os.path.join(gifs, f"{name}.gif"))
+                if g and n_ == 0:
+                    feat["gif"] = os.path.relpath(g, ws)
     elif video and vpath and os.path.exists(vpath):
         cards = None
         if spec.get("cards", True) and shutil.which("ffmpeg"):

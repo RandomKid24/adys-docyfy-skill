@@ -59,16 +59,20 @@ class Timeline:
         self.stills.append([round(t, 3), path, fade if self.stills else 0.0])
 
     # ---- rendering -------------------------------------------------------------------------------------------
-    def save(self, path):
+    def save(self, path, lang="en"):
         d = {k: getattr(self, k) for k in ("tmp", "vw", "vh", "accent", "app", "quality", "zmax", "stills", "cursor", "clicks",
-                                           "captions", "rings", "zooms", "audio", "start_pos")}
+                                           "rings", "zooms", "start_pos")}
+        d["captions"] = [(a, b, texts.get(lang) or texts["en"], chips.get(lang) or chips.get("en", ""))
+                         for a, b, texts, chips in self.captions]
+        d["audio"] = [(p, t) for p, t, lg in self.audio if lg == lang]
         d["end"] = self.t
         json.dump(d, open(path, "w"))
 
-    def render(self, out_mp4, intro=None, outro=None, voice_tail=0.0):
+    def render(self, out_mp4, intro=None, outro=None, voice_tail=0.0, lang="en"):
         W, H, fps = QUALITY[self.quality]
-        tj = os.path.join(self.tmp, "timeline.json")
-        self.save(tj)
+        tj = os.path.join(self.tmp, f"timeline-{lang}.json")
+        audio = [(p, t) for p, t, lg in self.audio if lg == lang]
+        self.save(tj, lang)
         i_len = intro[1] if intro else 0.0
         o_len = outro[1] if outro else 0.0
         body = self.t + voice_tail
@@ -78,13 +82,13 @@ class Timeline:
         json.dump(extra, open(tj + ".x", "w"))
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(fps), "-i", "-"]
         graph = []
-        for k, (path, t) in enumerate(self.audio):
+        for k, (path, t) in enumerate(audio):
             cmd += ["-i", path]
             ms = int((t + i_len) * 1000)
             graph.append(f"[{k + 1}:a]adelay={ms}|{ms}[a{k}]")
-        if self.audio:
-            mix = "".join(f"[a{k}]" for k in range(len(self.audio)))
-            graph.append(f"{mix}amix=inputs={len(self.audio)}:normalize=0:duration=longest,apad[aout]" if len(self.audio) > 1 else "[a0]apad[aout]")
+        if audio:
+            mix = "".join(f"[a{k}]" for k in range(len(audio)))
+            graph.append(f"{mix}amix=inputs={len(audio)}:normalize=0:duration=longest,apad[aout]" if len(audio) > 1 else "[a0]apad[aout]")
             cmd += ["-filter_complex", ";".join(graph), "-map", "0:v", "-map", "[aout]", "-c:a", "aac", "-b:a", "160k"]
         enc = os.environ.get("DOCYFY_ENCODER", "")
         if not enc:
@@ -259,7 +263,8 @@ def _caption(idx):
     H = d["H"]
     t_in, t_out, text, chip = d["captions"][idx]
     fs = int(H * 0.028)
-    f, fb = G["font"](fs), G["font"](int(fs * 0.62), "bold")
+    import theme
+    f, fb = theme.font_for(text, fs, "semibold"), theme.font_for(chip, int(fs * 0.62), "bold")
     maxw = int(L["Wp"] * 0.66)
     probe = ImageDraw.Draw(Image.new("RGB", (4, 4)))
     cw = probe.textlength(chip.upper(), font=fb) + fs * 0.95 if chip else 0
@@ -289,9 +294,9 @@ def _caption(idx):
         if i == 0 and chip:
             cwid = probe.textlength(chip.upper(), font=fb) + fs * 0.1
             dr.rounded_rectangle([xx * K, (yy + lh * 0.13) * K, (xx + cwid + fs * 0.5) * K, (yy + lh * 0.87) * K], int(fs * 0.2) * K, fill=acc + (255,))
-            dr.text(((xx + fs * 0.25) * K, (yy + lh * 0.2) * K), chip.upper(), font=G["font"](int(fs * 0.62 * K), "bold"), fill=(255, 255, 255, 255))
+            dr.text(((xx + fs * 0.25) * K, (yy + lh * 0.2) * K), chip.upper(), font=theme.font_for(chip, int(fs * 0.62 * K), "bold"), fill=(255, 255, 255, 255))
             xx += cw
-        dr.text((xx * K, yy * K), l, font=G["font"](fs * K), fill=(246, 247, 249, 255))
+        dr.text((xx * K, yy * K), l, font=theme.font_for(text, fs * K, "semibold"), fill=(246, 247, 249, 255))
     im = im.resize((w, h), Image.LANCZOS)
     G["caps"][idx] = im
     return im

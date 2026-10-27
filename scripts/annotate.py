@@ -375,7 +375,7 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
         elif style == "arrow":
             parts, bb, faint, tail = shape_arrow(box, rng, s, big.size)
         else:
-            parts, bb, faint, tail = shape_rect(box, rng, s)
+            parts, bb, faint, tail = shape_rect(box, rng, s, m.get("pad"))
         for pts in parts:
             halo_strokes.append((pts, w + (3.4 if CLEAN else 4.5) * s))
             ink_strokes.append((pts, w))

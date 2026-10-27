@@ -41,6 +41,22 @@ FALLBACKS = {
 }
 
 
+def has_deva(text):
+    return any("\u0900" <= c <= "\u097f" for c in (text or ""))
+
+
+def font_for(text, size, weight="regular"):
+    """PIL font that can draw this text. Devanagari (Hindi, Marathi) gets Noto Sans Devanagari."""
+    from PIL import ImageFont, features
+    kw = {"layout_engine": ImageFont.Layout.RAQM} if features.check("raqm") else {}
+    if has_deva(text):
+        name = {"regular": "Regular", "semibold": "SemiBold"}.get(weight, "Bold")
+        p = os.path.join(FONT_DIR, f"NotoSansDevanagari-{name}.ttf")
+        if os.path.exists(p):
+            return ImageFont.truetype(p, size, **kw)
+    return ImageFont.truetype(font_path(weight), size, **kw)
+
+
 def font_path(weight="regular"):
     """Path to a TrueType file. Plus Jakarta Sans if bundled, else a system font."""
     p = os.path.join(FONT_DIR, FONT_FILES.get(weight, FONT_FILES["regular"]))

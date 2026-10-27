@@ -11,7 +11,7 @@ Make guides that tell a non-technical reader exactly where to click. Scripts do 
 Scripts are in `scripts/` next to this file. Python is the single line in the `.python` file here if it exists, else `python3`. Run `<python> <skill-dir>/scripts/<name>.py`. If a package is missing and there is no `.python`, run `python3 -m venv ~/.docyfy/venv`, `~/.docyfy/venv/bin/pip install -r <skill-dir>/requirements.txt`, and write that interpreter path into `.python`. Never use `--break-system-packages`.
 
 ## Words after /docyfy
-`pdf` PDF and cheat sheets (capture with `--no-video`). `video` recordings only (skip `build_pdf.py`). `word` add `build_docx.py`. `site` add `build_site.py`. `all` everything. `draft|1080p|4k|8k` video quality, default 4k. `voice` narrated MP4. Words combine. A task or module name sets the scope. If words cover it, skip those intake questions. State what you will make in one line, then start.
+`pdf` PDF and cheat sheets (capture with `--no-video`). `video` recordings only (skip `build_pdf.py`). `word` add `build_docx.py`. `site` add `build_site.py`. `all` everything. `draft|1080p|4k|8k` video quality, default 4k. `voice` narrated MP4. `hi`, `mr`, `en` set the languages (Hindi, Marathi, English), one video each. Words combine. A task or module name sets the scope. If words cover it, skip those intake questions. State what you will make in one line, then start.
 
 ## Step 0. Resume
 If a workspace exists (`guide-workspace/*/state.json`), run `progress.py status --ws W` and continue at the first unfinished module. Never re-ask what `state.json` answers. App changed after a release: `references/update.md`.
@@ -29,7 +29,7 @@ Then `progress.py init --ws W --app NAME --url URL [--accent "#RRGGBB"] [--logo 
 
 ## Step 3. Capture, one module at a time
 Default: `references/fast-capture.md` (Playwright on this machine, needs no per-click round trips). If the app is not reachable from here (SSO, captcha, private network, no Playwright): `references/browser-capture.md`, then `references/capture.md`.
-Videos: read `references/video.md`. A PDF cannot play video, so never promise one inside it.
+Videos and languages: read `references/video.md`. Native dropdowns (`select` steps) are drawn open automatically in both screenshots and videos. A PDF cannot play video, so never promise one inside it.
 
 ## Step 4. Finish
 Read `references/finish.md` (quick start, workflows, cheat sheets, check, build, deliver). Send files with SendUserFile and report module count, page count and anything skipped, not a recap.

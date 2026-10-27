@@ -114,7 +114,15 @@ Set options in the capture spec header:
 
 Use `draft` while checking and `4k` for the final pass. 4K takes a few minutes per task on a laptop and is much faster on a Mac with ffmpeg's VideoToolbox encoder.
 
-Voice uses macOS `say` with the Rishi voice, then espeak-ng elsewhere. Set `DOCYFY_TTS_CMD='mytts "{text}" {out}'` to use another engine.
+### Hindi, Marathi and English
+
+Add `"langs": ["en", "hi", "mr"]` to the spec, or say `hi` or `mr` after the command. One video is rendered per language from the same captured stills, so extra languages only cost render time. Captions, step chips, title and end cards all switch language. Claude writes the Hindi and Marathi step text for you.
+
+Voice tries these in order: your own command (`DOCYFY_TTS_CMD`), Microsoft neural voices through `edge-tts` (best Hindi and Marathi, needs internet, no key), macOS `say`, then espeak-ng. Voices can be changed per language in the spec (see `references/video.md`).
+
+### Dropdowns
+
+A native dropdown step shows the list open. In the video the list opens, the cursor glides to the option, the option highlights, and it is clicked. In the PDF the screenshot shows the open list with the chosen option numbered.
 
 A PDF cannot play video. Recordings live in the help site. If you host the site, pass its address (`--site-url`) and each task in the PDF gets a "Watch this as a short video" link with a QR code.
 
@@ -164,7 +172,8 @@ The skill is token optimized. `SKILL.md` stays small, each step loads its own re
 ## Known limits
 
 - Tested end to end on a demo app and sample data. Run it on one real task first and check that the highlights line up with your screens.
-- The voice has only been tested with a stand-in tone, not the real macOS `say` voice.
+- The voice has only been tested with a stand-in tone, not the real macOS `say` or Microsoft voices. Hindi and Marathi text and captions are tested.
+- macOS has no Marathi voice, so Marathi needs `edge-tts` (needs internet) for good audio.
 - The bundled font lacks the rupee sign in its main set. PDFs handle it. Images show "Rs".
 - Apps behind single sign-on or captcha need the slower browser-tool capture.
 
