@@ -148,3 +148,7 @@ The fonts are Plus Jakarta Sans under the SIL Open Font License (`assets/fonts/L
 ### Narrated recordings
 
 Add `"voice": true` to the capture spec and each step is read aloud, like the Frappe help videos. The caption stays on screen until the sentence ends. The MP4 carries the voice and the GIF stays silent. On a Mac it uses `say` with the Rishi voice (change it with `"voice": {"name": "Samantha", "rate": 180}`). Elsewhere it falls back to espeak-ng. To use another engine, set `DOCYFY_TTS_CMD` to a command with `{text}` and `{out}` in it.
+
+### Highlights in videos
+
+The cursor already shows where to click, so videos skip the dim and the numbered disc on click, fill and select steps. You get the caption and the cursor. Look-only steps ("you see the confirmation") get a soft ring. Set `"highlight": "full"` in the capture spec for the spotlight look, or `"caption"` for captions only. PDFs and screenshots keep the spotlight, since they have no cursor.

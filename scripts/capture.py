@@ -20,6 +20,8 @@ A step: optional "goto"; its marks (targets to highlight) and picture are taken 
 action: click | fill [target, value] | select [target, value] | press key | wait (ms or selector). A step with
 a click and no marks highlights the click target. "shot": true forces a picture. "blur": [targets] pixelates
 (names, phones, amounts). Marks are numbered 1, 2, 3 in order.
+Highlight in the video: "highlight": "auto" (default) shows only the caption when the cursor points at a click, fill
+or select target, and a soft ring (no dim) on look-only steps. "full" always spotlights with a number, "caption" never.
 Voice: add "voice": true (or {"name": "Rishi", "rate": 170}) to the spec header and each step's text is read
 aloud, Frappe style. The MP4 carries the voice, the GIF stays silent. Uses macOS `say` (default voice Rishi),
 else espeak-ng. Set DOCYFY_TTS_CMD='mytts "{text}" {out}' to use another engine.
@@ -68,15 +70,17 @@ def box_of(page, target):
     return [round(b["x"]), round(b["y"]), round(b["width"]), round(b["height"])]
 
 
-OVERLAY_JS = """([boxes, caption, accent]) => {
+OVERLAY_JS = """([boxes, caption, accent, mode]) => {
   document.getElementById('__dy')?.remove();
   const root = document.createElement('div'); root.id = '__dy';
   root.style.cssText = 'position:fixed;inset:0;z-index:2147483646;pointer-events:none;font-family:system-ui,sans-serif;opacity:0;transition:opacity .28s ease';
-  boxes.forEach((b, i) => {
+  (mode === 'caption' ? [] : boxes).forEach((b, i) => {
+    const full = mode === 'full';
     const hole = document.createElement('div');
     hole.style.cssText = `position:absolute;left:${b[0]-8}px;top:${b[1]-8}px;width:${b[2]+16}px;height:${b[3]+16}px;border-radius:9px;` +
-      `box-shadow:0 0 0 9999px rgba(35,31,32,.12);outline:2.5px solid ${accent};outline-offset:-2px;background:transparent`;
+      `box-shadow:${full ? '0 0 0 9999px rgba(35,31,32,.12)' : 'none'};outline:2.5px solid ${accent};outline-offset:-2px;background:transparent`;
     root.appendChild(hole);
+    if (!full) return;
     const n = document.createElement('div');
     n.textContent = i + 1;
     n.style.cssText = `position:absolute;left:${Math.max(4, b[0]-8-34)}px;top:${b[1]+b[3]/2-15}px;width:30px;height:30px;border-radius:50%;` +
@@ -374,7 +378,9 @@ def run_task(p, spec, ws, task, video, accent):
                 dsec = audio_len(audio) if audio else 0.0
             read_ms = max(min(2600, 700 + 24 * len(plain(st["text"]))), int(dsec * 1000 + 350))
             if boxes:
-                page.evaluate(OVERLAY_JS, [boxes, plain(st["text"]), accent])
+                hl = spec.get("highlight", "auto")
+                mode = hl if hl in ("full", "caption") else ("caption" if tgt else "ring")
+                page.evaluate(OVERLAY_JS, [boxes, plain(st["text"]), accent, mode])
             if audio:
                 clips.append((audio, int((time.time() - t0) * 1000) + 150))
             if boxes or audio:
