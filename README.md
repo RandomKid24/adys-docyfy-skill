@@ -100,7 +100,7 @@ The site build writes `help-map.json`. It maps a `help_key` to a page URL. Point
 
 ## Change the look
 
-All colours and fonts live in `scripts/theme.py`. To use another accent for one project, pass `--accent "#RRGGBB"` to `scripts/progress.py init`. Highlights are clean outlines by default. Pass `--style sketch` for a hand-drawn pen look. Edit `theme.py` for anything else and rerun the build. The cache sees the change and redraws.
+All colours and fonts live in `scripts/theme.py`. To use another accent for one project, pass `--accent "#RRGGBB"` to `scripts/progress.py init`. Highlights use a spotlight by default (rest of the screen dimmed slightly, target outlined in the accent colour). Pass `--style clean` for a plain dark outline or `--style sketch` for a hand-drawn pen look. Edit `theme.py` for anything else and rerun the build. The cache sees the change and redraws.
 
 ## Layout
 

@@ -20,7 +20,8 @@ from PIL import ImageFilter, Image, ImageDraw, ImageFont
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import theme
 
-STYLE_VERSION = "7"
+STYLE_VERSION = "8"
+SPOT = False
 CLEAN = True              # set per call by annotate(style=...); "clean" is the default, "sketch" is hand-drawn
 SS = 2                    # supersampling for smooth lines
 TAU = math.tau
@@ -324,8 +325,10 @@ def draw_badge(d, c, n, r, s, accent, paper):
 
 # ---------- main drawing ----------
 def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, accent=None, style=None):
-    global CLEAN
-    CLEAN = (style or "clean") != "sketch"
+    global CLEAN, SPOT
+    style = style or "spotlight"
+    CLEAN = style != "sketch"
+    SPOT = style == "spotlight"
     tk = theme.tokens({"brand": {"accent": accent}} if accent else None)
     ink, paper, acc = theme.hex_rgb(tk["ink"]), theme.hex_rgb(tk["paper"]), theme.hex_rgb(tk["accent"])
     im = Image.open(img_path).convert("RGB")
@@ -334,10 +337,10 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
     big = im.resize((im.width * SS, im.height * SS), Image.LANCZOS)
     d = ImageDraw.Draw(big)
     s = SS * max(1.0, im.width / 1280)     # one unit = 1px on a 1280-wide image
-    w = 2.5 * s
+    w = (2.2 if SPOT else 2.5) * s
     seed = int(hashlib.md5(json.dumps(marks, sort_keys=True).encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
-    r_badge = 13 * s
+    r_badge = (15 if SPOT else 13) * s
 
     def scaled(m):
         bx, by, bw, bh = m["box"]
@@ -354,6 +357,20 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
                 cell = max(6, int(8 * s))
                 small = reg.resize((max(1, reg.width // cell), max(1, reg.height // cell)), Image.BILINEAR)
                 big.paste(small.resize(reg.size, Image.NEAREST), (x0, y0))
+
+    # 1b. spotlight: dim everything except the marked areas, so the eye lands on the target
+    if SPOT:
+        lit = Image.new("L", big.size, 0)
+        ld = ImageDraw.Draw(lit)
+        pad = 9 * s
+        for m in marks:
+            if m.get("style") == "blur" or "box" not in m:
+                continue
+            x, y, bw, bh = scaled(m)
+            ld.rounded_rectangle([x - pad, y - pad, x + bw + pad, y + bh + pad], radius=9 * s, fill=255)
+        lit = lit.filter(ImageFilter.GaussianBlur(2.5 * s))
+        big = Image.composite(big, Image.blend(big, Image.new("RGB", big.size, ink), 0.1), lit)
+        d = ImageDraw.Draw(big)
 
     # 2. lines: paper halo, faint second pass and the main pen stroke are three masks,
     #    wobbled by the same noise, then painted on top of the screenshot
@@ -388,7 +405,7 @@ def annotate(img_path, marks, out_path, viewport=None, crop=None, max_w=1600, ac
             ink_mask = displace(ink_mask, s, seed)
             big.paste(Image.new("RGB", big.size, ink), (0, 0), faint_mask)
         big.paste(Image.new("RGB", big.size, paper), (0, 0), halo_mask)
-        big.paste(Image.new("RGB", big.size, ink), (0, 0), ink_mask)
+        big.paste(Image.new("RGB", big.size, acc if SPOT else ink), (0, 0), ink_mask)
         d = ImageDraw.Draw(big)
 
     # 3. numbered discs, outside the shapes and always inside the visible picture
@@ -438,7 +455,7 @@ def key_for(img_path, marks, viewport, crop, accent, style=None):
     h = hashlib.sha1()
     with open(img_path, "rb") as f:
         h.update(f.read())
-    h.update(json.dumps([marks, viewport, crop, accent, style or 'clean', STYLE_VERSION], sort_keys=True).encode())
+    h.update(json.dumps([marks, viewport, crop, accent, style or 'spotlight', STYLE_VERSION], sort_keys=True).encode())
     return h.hexdigest()[:16]
 
 
@@ -504,7 +521,7 @@ def main():
     p.add_argument("--viewport", nargs=2, type=float)
     p.add_argument("--crop", nargs=4, type=float)
     p.add_argument("--accent")
-    p.add_argument("--style", choices=["clean", "sketch"], default=None)
+    p.add_argument("--style", choices=["clean", "sketch", "spotlight"], default=None)
     a = p.parse_args()
     if a.ws and a.module:
         run_module(a.ws, a.module)
