@@ -184,7 +184,7 @@ For long or confusing flows, Claude can first walk the task in your own signed-i
 
 ## Every step, in order
 
-`capture.py draft --url FORM_URL --title "Add an employee"` opens the form and does it for real. It writes one step per field in page order, each Next click in a wizard, and the final Save, with sample data and required or optional in the text. Passwords and file uploads become look-only steps. Edit the words, keep the steps. On local and staging, `capture.py run` stops if a step only shows boxes and does nothing, or if the form's required fields are not all filled.
+`capture.py draft --url FORM_URL --title "Add an employee"` opens the form and does it for real. It writes one step per field in page order, each Next click in a wizard, and the final Save, with sample data and required or optional in the text. It reads the live page, not a list of words, so it works in any language and any layout. Sample values come from each field's own type, pattern, length limits and the example shown in its box, and the browser is asked whether the field accepts the value. Hidden sections show where a wizard continues. The main button is picked from its style and type, and it says so when it cannot tell Save from Cancel (use `--advance "Name"` or `--finish "Name"` to choose). If the page has no form open, it lists the buttons so you can pass the right one with `--pre`. Passwords and file uploads become look-only steps. Edit the words, keep the steps. On local and staging, `capture.py run` stops if a step only shows boxes and does nothing, or if the form's required fields are not all filled.
 
 ## Finding every field
 

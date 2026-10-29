@@ -328,59 +328,106 @@ FIELDS_JS = """() => {
 }"""
 
 
-DRAFT_JS = """() => {
+DRAFT_JS = r"""() => {
   const vis = e => { const s = getComputedStyle(e); const r = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && (r.width > 2 || e.type === 'checkbox' || e.type === 'radio'); };
-  const txt = e => (e && (e.innerText || e.value) || '').replace(/\\s+/g, ' ').trim();
+  const txt = e => (e && (e.innerText || e.value) || '').replace(/\s+/g, ' ').trim();
   const uniq = s => { try { return document.querySelectorAll(s).length === 1; } catch (x) { return false; } };
   const path = e => { const parts = []; for (; e && e.nodeType === 1 && e !== document.body; e = e.parentElement) { let i = 1, p = e; while ((p = p.previousElementSibling)) if (p.tagName === e.tagName) i++; parts.unshift(e.tagName.toLowerCase() + ':nth-of-type(' + i + ')'); } return 'body > ' + parts.join(' > '); };
   const sel = e => { if (e.id && uniq('#' + CSS.escape(e.id))) return '#' + CSS.escape(e.id);
     const n = e.getAttribute('name'); if (n && uniq(e.tagName.toLowerCase() + '[name="' + n + '"]')) return e.tagName.toLowerCase() + '[name="' + n + '"]';
     const pl = e.getAttribute('placeholder'); if (pl && uniq(e.tagName.toLowerCase() + '[placeholder="' + pl + '"]')) return e.tagName.toLowerCase() + '[placeholder="' + pl + '"]';
     return path(e); };
-  const fields = [];
-  document.querySelectorAll('input,select,textarea').forEach(e => {
-    if (['hidden', 'submit', 'button', 'reset', 'image'].includes(e.type) || !vis(e) || e.disabled || e.readOnly) return;
+  const els = [...document.querySelectorAll('input,select,textarea')].filter(e => !['hidden', 'submit', 'button', 'reset', 'image'].includes(e.type) && vis(e) && !e.disabled && !e.readOnly);
+  const fields = els.map(e => {
     let lab = (e.id && txt(document.querySelector(`label[for="${CSS.escape(e.id)}"]`))) || txt(e.closest('label')) || e.getAttribute('aria-label') || '';
     if (!lab) { let p = e.parentElement; for (let k = 0; k < 4 && p && !lab; k++, p = p.parentElement) { const l = p.querySelector('label,legend'); if (l && !l.contains(e)) lab = txt(l); } }
-    const req = !!(e.required || e.getAttribute('aria-required') === 'true' || /\\*\\s*$/.test(lab));
-    fields.push({sel: sel(e), label: (lab || e.placeholder || e.name || '').replace(/\\s*\\*\\s*$/, ''), type: e.tagName === 'SELECT' ? 'select' : (e.type || e.tagName.toLowerCase()),
-      required: req, placeholder: e.placeholder || '', y: e.getBoundingClientRect().top + scrollY,
-      options: e.tagName === 'SELECT' ? [...e.options].map(o => ({t: o.text.trim(), v: o.value, off: o.disabled || !o.value})) : undefined});
+    const cls = (e.className || '') + ' ' + (e.closest('div') ? e.closest('div').className : '');
+    const req = !!(e.required || e.getAttribute('aria-required') === 'true' || /\*\s*$/.test(lab) || /required/i.test(cls));
+    const g = k => e.getAttribute(k) || '';
+    return {sel: sel(e), label: (lab || e.placeholder || e.name || '').replace(/\s*\*\s*$/, ''), type: e.tagName === 'SELECT' ? 'select' : (e.type || e.tagName.toLowerCase()),
+      required: req, placeholder: e.placeholder || '', auto: g('autocomplete'), pattern: g('pattern'), maxlength: +g('maxlength') || 0, minlength: +g('minlength') || 0,
+      min: g('min'), max: g('max'), step: g('step'), inputmode: g('inputmode'),
+      options: e.tagName === 'SELECT' ? [...e.options].map(o => ({t: o.text.trim(), v: o.value, off: o.disabled || !o.value})) : undefined};
   });
-  const btns = [...document.querySelectorAll('button,[type=submit],a[role=button],a.btn')].filter(vis).filter(b => !b.disabled).map(b => ({sel: sel(b), name: txt(b)})).filter(b => b.name && b.name.length < 40);
-  return {fields, btns};
+  // the form or panel that holds these fields, and any fields in it that are hidden right now (other wizard sections)
+  let box = els.length ? (els[0].closest('form') || els[0].parentElement) : null;
+  while (box && box.parentElement && els.filter(e => box.contains(e)).length < els.length * 0.8 && box !== document.body) box = box.parentElement;
+  const hid = b => b ? [...b.querySelectorAll('input,select,textarea')].filter(e => !['hidden', 'submit', 'button', 'reset', 'image'].includes(e.type) && !vis(e)).map(sel) : [];
+  let hidden = hid(box);
+  if (box && !hidden.length) { let up = box; for (let k = 0; k < 5 && up.parentElement && up !== document.body; k++) { up = up.parentElement; const h = hid(up); if (h.length) { box = up; hidden = h; break; } } }
+  const stepper = !!document.querySelector('[role=tab],[aria-current=step],[class*=stepper i],[class*=wizard i],[class*=progress-step i]');
+  const root = box ? (box.closest('[role=dialog],dialog,.modal,main,section,article') || box.parentElement || box) : document.body;
+  const rgb = s => (s.match(/[\d.]+/g) || []).map(Number);
+  const btns = [...root.querySelectorAll('button,[type=submit],a[role=button],a.btn,input[type=submit]')].filter(vis).filter(b => !b.disabled && !b.closest('nav,aside,header,[role=navigation]')).map((b, i, arr) => {
+    const cs = getComputedStyle(b), bg = rgb(cs.backgroundColor), a = bg.length > 3 ? bg[3] : 1;
+    const sat = bg.length >= 3 && a > 0.3 ? (Math.max(...bg.slice(0, 3)) - Math.min(...bg.slice(0, 3))) / 255 : 0;
+    const dark = bg.length >= 3 && a > 0.3 && Math.max(...bg.slice(0, 3)) < 80;
+    const kl = ((b.className && b.className.baseVal === undefined ? b.className : '') + ' ' + (b.getAttribute('data-bs-dismiss') || b.getAttribute('data-dismiss') || '') + ' ' + (b.getAttribute('aria-label') || '')).toLowerCase();
+    const secondary = /cancel|secondary|outline|ghost|link|light|neutral|close|dismiss|back|prev|reset|tertiary/.test(kl) || b.type === 'reset' || b.hasAttribute('formnovalidate');
+    const main = /primary|success|confirm|cta|accent|brand/.test(kl);
+    let score = (b.type === 'submit' ? 5 : 0) + (sat > 0.25 || dark ? 4 : 0) + (main ? 3 : 0) - (secondary ? 6 : 0) + (box && box.contains(b) ? 1 : 0) + Math.min(b.innerText.length, 30) * 0.01 + i * 0.0001;
+    return {sel: sel(b), name: txt(b), score, submit: b.type === 'submit'};
+  }).filter(b => b.name && b.name.length < 40);
+  btns.sort((x, y) => y.score - x.score);
+  return {fields, btns, hidden, stepper, sig: fields.map(f => f.sel).join('|')};
 }"""
-
-SAMPLE = [
-    (r"e-?mail", "sample.user@example.com"), (r"phone|mobile|contact no|whatsapp", "9876543210"),
-    (r"pan\b", "ABCDE1234F"), (r"gst", "27ABCDE1234F1Z5"), (r"pin ?code|zip|postal", "422001"),
-    (r"first name", "Asha"), (r"last name|surname", "Patil"), (r"name", "Sample Name"),
-    (r"address", "12 Sample Street, Nashik"), (r"city", "Nashik"), (r"amount|salary|price|rate|cost", "5000"),
-    (r"quantity|qty|days|count|number|age", "2"), (r"reason|remark|note|comment|description|message", "Sample text for this guide."),
-]
 
 
 def sample_for(f):
-    t, lab = f["type"], (f["label"] + " " + f["placeholder"]).lower()
+    """Pick a value the field itself will accept. Its own attributes decide, not its label."""
+    t = f["type"]
+    toks = [t_ for t_ in re.findall(r"[^\s,;:]*[\d@][^\s,;:]*", f["placeholder"])]
+    ex = toks[0] if toks else ""          # the app shows an example in the box, so use it
+    auto = {"email": "sample.user@example.com", "tel": "9876543210", "given-name": "Asha", "family-name": "Patil", "name": "Asha Patil",
+            "postal-code": "422001", "street-address": "12 Sample Street", "address-line1": "12 Sample Street", "country-name": "India", "organization": "Sample Traders"}
+    if ex:
+        return ex
+    if f.get("auto") in auto:
+        return auto[f["auto"]]
     if t == "email": return "sample.user@example.com"
-    if t == "tel": return "9876543210"
-    if t == "date": return time.strftime("%Y-%m-%d")
+    if t == "tel" or f.get("inputmode") in ("tel", "numeric", "decimal"): return "9876543210"[:f.get("maxlength") or 10]
+    if t == "date": return f.get("min") or time.strftime("%Y-%m-%d") if not f.get("max") else f["max"]
     if t == "time": return "10:00"
-    if t == "number": return "2"
+    if t == "datetime-local": return time.strftime("%Y-%m-%dT10:00")
+    if t == "month": return time.strftime("%Y-%m")
     if t == "url": return "https://example.com"
-    for pat, val in SAMPLE:
-        if re.search(pat, lab):
-            return val
-    return "Sample text" if t != "textarea" else "Sample text for this guide."
+    if t == "color": return "#1c75bc"
+    if t in ("number", "range"):
+        lo, hi = f.get("min"), f.get("max")
+        try:
+            return str(int(float(lo)) + 1 if lo not in ("", None) and (hi in ("", None) or float(lo) + 1 <= float(hi)) else int(float(hi)) if hi not in ("", None) else 2)
+        except ValueError:
+            return "2"
+    return None
 
 
-ADVANCE = r"^(next|continue|proceed|save (and|&) (next|continue)|next step|next section)\b"
-FINISH = r"(save|submit|apply|create|add|send|register|finish|confirm|update|request)"
+def fallback_values(f):
+    """Tried in turn when the field says its value is invalid. Chosen from the field's own limits."""
+    n = max(f.get("minlength") or 0, 1)
+    cap = f.get("maxlength") or 40
+    base = ["Sample text", "Asha Patil", "9876543210", "422001", "sample.user@example.com", "2", "ABCDE1234F", "27ABCDE1234F1Z5", "Sample text for this guide."]
+    return [v[:cap] if len(v) >= n else v.ljust(n, "x")[:cap] for v in base]
+
+
+def fill_valid(page, f, val):
+    """Type the value, then ask the browser whether the field accepts it. Try other values if not."""
+    loc = page.locator(f["sel"]).first
+    tries = [val] if val else []
+    tries += fallback_values(f) if f["type"] not in ("date", "time", "number") else []
+    for v in dict.fromkeys(t for t in tries if t):
+        loc.fill(v)
+        try:
+            if loc.evaluate("e => e.checkValidity()"):
+                return v, True
+        except Exception:
+            return v, True
+    return (tries[0] if tries else ""), False
 
 
 def cmd_draft(a):
-    """Write a first spec that walks every field of a form, every Next, and the final Save, in order."""
+    """Write a first spec that walks every field, every Next and the final Save in order. It reads the live page, not a word list."""
     sp = pw()()
+    notes = []
     with sp as p:
         br = launch(p)
         ctx = br.new_context(storage_state=(cdp_state(br) if os.environ.get("DOCYFY_CDP") else None) or (a.state if a.state and os.path.exists(a.state) else None),
@@ -390,15 +437,22 @@ def cmd_draft(a):
         steps, fields = [], []
         origin = re.match(r"https?://[^/]+", a.url).group(0)
         path = a.url[len(origin):] or "/"
+        css_like = ("#", ".", "[", "role=", "text=", "xpath=", "css=")
         for pre in (a.pre or []):                    # clicks needed to reach the form, such as the Add button
-            lab = pre
-            steps.append({"text": f"Click **{lab}**." if not pre.startswith(("#", ".", "[", "role=", "text=")) else "Click the button.",
-                          **({"goto": path} if not steps else {}), "click": pre if pre.startswith(("#", ".", "[", "role=", "text=")) else f'role=button[name="{pre}"]'})
-            page.locator(steps[-1]["click"]).first.click(timeout=6000)
-            page.wait_for_timeout(500)
+            tgt = pre if pre.startswith(css_like) else f'role=button[name="{pre}"]'
+            steps.append({"text": f"Click **{pre}**." if tgt != pre else "Click the button.", **({"goto": path} if not steps else {}), "click": tgt})
+            page.locator(tgt).first.click(timeout=6000)
+            page.wait_for_timeout(600)
+        advanced, done_sel = 0, set()
         for sec in range(1, 13):
             d = page.evaluate(DRAFT_JS)
+            if not d["fields"] and sec == 1:
+                names = [b["name"] for b in d["btns"]][:8]
+                notes.append("No form is open on this page." + (f" Buttons here: {', '.join(names)}. Pick the one that opens the form and pass it with --pre." if names else ""))
             for f in d["fields"]:
+                if f["sel"] in done_sel:
+                    continue
+                done_sel.add(f["sel"])
                 if f["type"] == "password":
                     steps.append({"text": f"Type your **{f['label']}**. Do it yourself, this guide never types it.", "look": True, "marks": [{"target": f["sel"]}]})
                     continue
@@ -410,37 +464,56 @@ def cmd_draft(a):
                     opts = [o for o in f["options"] if not o["off"]]
                     if not opts:
                         continue
-                    pick = opts[min(1, len(opts) - 1)]["t"] if len(opts) > 1 and not f["required"] else opts[0]["t"]
+                    pick = opts[0]["t"]
                     steps.append({"text": f"Open **{f['label']}** ({need}) and choose **{pick}**.", "select": [f["sel"], pick]})
                     page.locator(f["sel"]).first.select_option(label=pick)
                 elif f["type"] in ("checkbox", "radio"):
                     steps.append({"text": f"Tick **{f['label']}** ({need}).", "click": f["sel"]})
                     page.locator(f["sel"]).first.check()
                 else:
-                    val = sample_for(f)
+                    val, ok = fill_valid(page, f, sample_for(f))
+                    if not ok:
+                        notes.append(f"'{f['label']}': no sample value passed its own validation. Check the value in that step.")
                     steps.append({"text": f"Click **{f['label']}** ({need}) and type {val}.", "fill": [f["sel"], val]})
-                    page.locator(f["sel"]).first.fill(val)
                 fields.append({"name": f["label"], "required": f["required"], "help": "", "example": ""})
-            adv = next((b for b in d["btns"] if re.search(ADVANCE, b["name"].lower())), None)
-            fin = next((b for b in reversed(d["btns"]) if re.search(FINISH, b["name"].lower()) and not re.search(r"cancel|back|clear|reset", b["name"].lower())), None)
-            if adv and not (fin and fin["name"] == adv["name"]):
-                steps.append({"text": f"Click **{adv['name']}**.", "click": adv["sel"]})
-                page.locator(adv["sel"]).first.click(timeout=6000)
-                page.wait_for_timeout(600)
+            btns = d["btns"]
+            named = lambda n_: next((b for b in btns if b["name"].strip().lower() == n_.strip().lower()), None) if n_ else None
+            unseen = [h for h in d["hidden"] if h not in done_sel]
+            more = bool(unseen) or (d["stepper"] and bool(btns) and not btns[0]["submit"])
+            primary = named(a.advance if more else a.finish) or (btns[0] if btns else None)
+            if primary and len(btns) > 1 and abs(btns[0]["score"] - btns[1]["score"]) < 0.5 and not named(a.advance if more else a.finish):
+                notes.append(f"Could not tell '{btns[0]['name']}' from '{btns[1]['name']}' by style, so I picked '{btns[0]['name']}'. "
+                             f"If that is wrong, run again with --{'advance' if more else 'finish'} \"{btns[1]['name']}\".")
+            if primary and more and advanced < 10:
+                before = d["sig"]
+                steps.append({"text": f"Click **{primary['name']}**.", "click": primary["sel"]})
+                page.locator(primary["sel"]).first.click(timeout=6000)
+                page.wait_for_timeout(700)
+                advanced += 1
+                if page.evaluate(DRAFT_JS)["sig"] == before:
+                    notes.append(f"'{primary['name']}' did not open a new section. The form may have checks that failed, or this was the last step. Look at it before running.")
+                    break
                 continue
-            if fin:
-                steps.append({"text": f"Click **{fin['name']}**.", "click": fin["sel"], "warning": "This saves the record. Use test data on staging."})
+            if primary:
+                steps.append({"text": f"Click **{primary['name']}**.", "click": primary["sel"], "warning": "This saves the record. Use test data on staging."})
+            else:
+                notes.append("No Save or Submit button was found. Add the last click by hand.")
             break
         br.close()
-    steps.append({"text": "You see the confirmation message. (Write what the screen shows here.)", "shot": True, "marks": [{"target": "text=" + (a.confirm or "success")}]})
+    last = {"text": "You see the confirmation. (Write what the screen shows here.)", "shot": True}
+    if a.confirm:
+        last["marks"] = [{"target": "text=" + a.confirm}]
+    steps.append(last)
     if steps and "goto" not in steps[0]:
         steps[0]["goto"] = path
     spec = {"env": "staging", "base": origin, "viewport": [1440, 900], "quality": "draft",
-            "tasks": [{"slug": re.sub(r"[^a-z0-9]+", "-", a.title.lower()).strip("-"), "title": a.title, "goal": "", "before": {"menu": "", "role": "", "ready": []},
+            "tasks": [{"slug": re.sub(r"[^a-z0-9]+", "-", a.title.lower()).strip("-") or "task", "title": a.title, "goal": "", "before": {"menu": "", "role": "", "ready": []},
                        "fields": fields, "steps": steps}]}
     json.dump(spec, open(a.out, "w"), indent=1, ensure_ascii=False)
-    print(f"wrote {a.out}: {len(steps)} steps, {len(fields)} fields. It walks every field and every Next in order.\n"
-          "Now rewrite each step's text in plain words, add help and example to the fields, set the confirmation text, and run it.")
+    print(f"wrote {a.out}: {len(steps)} steps, {len(fields)} fields. It reads the live page: field attributes, hidden sections, and the main button.")
+    for n in notes:
+        print("  check: " + n)
+    print("Now rewrite each step's text in plain words, add help and example to the fields, and run it.")
 
 
 def cmd_fields(a):
@@ -1253,7 +1326,7 @@ def main():
     s = sub.add_parser("update"); s.add_argument("--ws", required=True); s.add_argument("--no-video", action="store_true"); s.add_argument("--threshold", type=float, default=0.01); s.set_defaults(f=cmd_update)
     s = sub.add_parser("chrome"); s.add_argument("--url", default=""); s.set_defaults(f=cmd_chrome)
     s = sub.add_parser("draft"); s.add_argument("--url", required=True); s.add_argument("--title", required=True); s.add_argument("--out", default="spec.json")
-    s.add_argument("--state"); s.add_argument("--pre", action="append"); s.add_argument("--confirm", default=""); s.set_defaults(f=cmd_draft)
+    s.add_argument("--state"); s.add_argument("--pre", action="append"); s.add_argument("--confirm", default=""); s.add_argument("--advance", default=""); s.add_argument("--finish", default=""); s.set_defaults(f=cmd_draft)
     s = sub.add_parser("fields"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--click", action="append"); s.add_argument("--json"); s.set_defaults(f=cmd_fields)
     s = sub.add_parser("run"); s.add_argument("--ws", required=True); s.add_argument("--spec", required=True)
     s.add_argument("--no-video", action="store_true"); s.add_argument("--only"); s.set_defaults(f=cmd_run)
