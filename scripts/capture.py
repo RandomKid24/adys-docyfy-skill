@@ -564,7 +564,8 @@ def studio_step(S, page, st, i, n, action, tgt_box, boxes, texts, audios, dsec, 
         S.t += 0.6
     else:
         S.t += 0.3
-    S.captions.append((round(t_cap, 3), round(cap_end if cap_end else S.t + 0.15, 3), texts, chips))
+    avoid = [list(b) for b in boxes] + ([list(tgt_box)] if tgt_box is not None else [])
+    S.captions.append((round(t_cap, 3), round(cap_end if cap_end else S.t + 0.15, 3), texts, chips, avoid))
 
 
 def make_gif(mp4, out_gif):

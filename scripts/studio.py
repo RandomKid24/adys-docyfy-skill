@@ -11,6 +11,7 @@ from functools import lru_cache
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+GLASS = 205          # caption box opacity out of 255; the picture behind it is blurred, so text stays readable
 QUALITY = {"draft": (1920, 1080, 30), "1080p": (1920, 1080, 60), "4k": (3840, 2160, 60), "8k": (7680, 4320, 60)}
 
 
@@ -62,8 +63,8 @@ class Timeline:
     def save(self, path, lang="en"):
         d = {k: getattr(self, k) for k in ("tmp", "vw", "vh", "accent", "app", "quality", "zmax", "stills", "cursor", "clicks",
                                            "rings", "zooms", "start_pos")}
-        d["captions"] = [(a, b, texts.get(lang) or texts["en"], chips.get(lang) or chips.get("en", ""))
-                         for a, b, texts, chips in self.captions]
+        d["captions"] = [(a, b, texts.get(lang) or texts["en"], chips.get(lang) or chips.get("en", ""), avoid)
+                         for a, b, texts, chips, avoid in self.captions]
         d["audio"] = [(p, t) for p, t, lg in self.audio if lg == lang]
         d["end"] = self.t
         json.dump(d, open(path, "w"))
@@ -131,6 +132,7 @@ def _init(tj):
     G["bg"], G["pm"] = _background(d, L)
     G["cur"] = {}
     G["caps"] = [None] * len(d["captions"])
+    G["captop"] = {}
     G["cards"] = {}
 
 
@@ -261,7 +263,7 @@ def _caption(idx):
         return G["caps"][idx]
     d, L = G["d"], G["L"]
     H = d["H"]
-    t_in, t_out, text, chip = d["captions"][idx]
+    t_in, t_out, text, chip, _avoid = d["captions"][idx]
     fs = int(H * 0.028)
     import theme
     f, fb = theme.font_for(text, fs, "semibold"), theme.font_for(chip, int(fs * 0.62), "bold")
@@ -284,7 +286,7 @@ def _caption(idx):
     K = 2
     im = Image.new("RGBA", (w * K, h * K), (0, 0, 0, 0))
     dr = ImageDraw.Draw(im)
-    dr.rounded_rectangle([0, 0, w * K - 1, h * K - 1], int(fs * 0.45) * K, fill=(30, 27, 28, 238))
+    dr.rounded_rectangle([0, 0, w * K - 1, h * K - 1], int(fs * 0.45) * K, fill=(30, 27, 28, GLASS))
     acc = tuple(int(d["accent"].lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
     dr.rounded_rectangle([0, 0, int(fs * 0.3) * K, h * K - 1], int(fs * 0.15) * K, fill=acc + (255,))
     x = pad_x + int(fs * 0.3)
@@ -298,8 +300,28 @@ def _caption(idx):
             xx += cw
         dr.text((xx * K, yy * K), l, font=theme.font_for(text, fs * K, "semibold"), fill=(246, 247, 249, 255))
     im = im.resize((w, h), Image.LANCZOS)
-    G["caps"][idx] = im
-    return im
+    mk = Image.new("L", (w * K, h * K), 0)
+    ImageDraw.Draw(mk).rounded_rectangle([0, 0, w * K - 1, h * K - 1], int(fs * 0.45) * K, fill=255)
+    G["caps"][idx] = (im, mk.resize((w, h), Image.LANCZOS))
+    return G["caps"][idx]
+
+
+def _caption_at_top(idx, w, h):
+    """Put the caption at the top when the bottom spot would cover what the step points at."""
+    if idx in G["captop"]:
+        return G["captop"][idx]
+    d, L = G["d"], G["L"]
+    cx0 = L["x0"] + (L["Wp"] - w) // 2
+    cy0 = L["y0"] + L["Hp"] - h - int(d["H"] * 0.04)
+    m = int(d["H"] * 0.02)
+    box = (cx0 - m, cy0 - m, cx0 + w + m, cy0 + h + m)
+    top = False
+    for bx in d["captions"][idx][4]:
+        r = (L["x0"] + bx[0] * L["s"], L["y0"] + bx[1] * L["s"], L["x0"] + (bx[0] + bx[2]) * L["s"], L["y0"] + (bx[1] + bx[3]) * L["s"])
+        if r[0] < box[2] and r[2] > box[0] and r[1] < box[3] and r[3] > box[1]:
+            top = True
+    G["captop"][idx] = top
+    return top
 
 
 def _card(path):
@@ -363,15 +385,21 @@ def _body(t):
     px, py = to_screen(cx, cy)
     base.paste(sprite, (int(round(px - hot[0])), int(round(py - hot[1]))), sprite)
     # captions
-    for k, (a, b, text, chip) in enumerate(d["captions"]):
+    for k, (a, b, text, chip, _avoid) in enumerate(d["captions"]):
         f = sm((t - a) / 0.3) * (1 - sm((t - (b - 0.3)) / 0.3))
         if f > 0.01:
-            cap = _caption(k)
+            cap, mk = _caption(k)
+            top = _caption_at_top(k, cap.width, cap.height)
+            cx0 = L["x0"] + (L["Wp"] - cap.width) // 2
+            slide = int((1 - f) * d["H"] * 0.012)
+            cy0 = (L["y0"] + int(d["H"] * 0.04) - slide) if top else (L["y0"] + L["Hp"] - cap.height - int(d["H"] * 0.04) + slide)
             if f < 1:
                 cap = cap.copy()
                 cap.putalpha(cap.getchannel("A").point(lambda v, f=f: int(v * f)))
-            cx0 = L["x0"] + (L["Wp"] - cap.width) // 2
-            cy0 = L["y0"] + L["Hp"] - cap.height - int(d["H"] * 0.04) + int((1 - f) * d["H"] * 0.012)
+                mk = mk.point(lambda v, f=f: int(v * f))
+            from PIL import ImageFilter
+            region = base.crop((cx0, cy0, cx0 + cap.width, cy0 + cap.height)).filter(ImageFilter.GaussianBlur(d["H"] * 0.008))
+            base.paste(region, (cx0, cy0), mk)       # frosted glass: blur what is behind the box
             base.paste(cap, (cx0, cy0), cap)
     return base
 

@@ -16,6 +16,9 @@ A studio renderer takes sharp stills of each page state, then draws the cursor, 
 
 Use `draft` while checking a spec and `4k` for the final pass. 4K takes a few minutes per task on a laptop. On a Mac with ffmpeg's VideoToolbox encoder it is much faster. `DOCYFY_PRESET=fast` shrinks files at the cost of render time.
 
+## Caption box
+Frosted glass (80% opaque, backdrop blurred). It jumps to the top of the window when the bottom spot would cover a marked target. Opacity is `GLASS` in `scripts/studio.py`.
+
 ## Languages and voice
 `"langs": ["en", "hi", "mr"]` renders one video per language from the same captured stills, so extra languages cost render time only. Files are `<task>.mp4` for the first language and `<task>.hi.mp4`, `<task>.mr.mp4` for the rest. Captions, step chips, title and end cards all switch language.
 
