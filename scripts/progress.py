@@ -7,6 +7,7 @@ re-reading files, which keeps token use low and prevents repeated work.
 Commands
   init        --ws W --app NAME --url URL [--scope all|specific] [--gifs] [--audience TXT]
   add-module  --ws W --slug S --title T [--features "A,B,C"]
+  note        --ws W --text TXT   add a decision or fact to docyfy.md for later agents
   status      --ws W
   next        --ws W            print first module not yet built
   set         --ws W --module S --status pending|capturing|annotated|written|built|skipped [--note TXT]
@@ -14,6 +15,16 @@ Commands
   shot-get    --ws W --key K    exit 0 and print path if registered and present, else exit 1
 """
 import argparse, json, os, shutil, sys, time
+
+try:
+    import journal as _journal
+except Exception:
+    _journal = None
+
+def _jlog(ws, text, **m):
+    if _journal:
+        _journal.event(ws, text, **m)
+
 
 STATUSES = ["pending", "capturing", "annotated", "written", "built", "skipped"]
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,6 +65,7 @@ def cmd_init(a):
           "brand": {"accent": a.accent, "logo": a.logo, "style": a.style or "spotlight", "site_url": a.site_url.rstrip("/")}}
     save(a.ws, st)
     print(f"initialised {a.ws}")
+    _jlog(a.ws, f"Started guide for {a.app}", base=a.url or None)
 
 
 def cmd_add(a):
@@ -100,6 +112,7 @@ def cmd_set(a):
         st["modules"][a.module]["note"] = a.note
     save(a.ws, st)
     print(f"{a.module} -> {a.status}")
+    _jlog(a.ws, f"Module {a.module} set to {a.status}" + (f" ({a.note})" if a.note else ""))
 
 
 def cmd_shot_register(a):
@@ -120,6 +133,12 @@ def cmd_shot_get(a):
     sys.exit(1)
 
 
+def cmd_note(a):
+    import journal
+    journal.note(a.ws, a.text)
+    print("noted in docyfy.md")
+
+
 def main():
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -136,6 +155,7 @@ def main():
         ("--audience", {"default": ""}), ("--accent", {"default": ""}), ("--style", {"default": "spotlight", "choices": ["clean", "sketch", "spotlight"]}), ("--logo", {"default": ""}), ("--site-url", {"default": ""}))
     add("add-module", cmd_add, ("--slug", {"required": True}), ("--title", {"required": True}),
         ("--features", {"default": ""}))
+    add("note", cmd_note, ("--text", {"required": True}))
     add("status", cmd_status)
     add("next", cmd_next)
     add("set", cmd_set, ("--module", {"required": True}), ("--status", {"required": True}),

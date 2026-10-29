@@ -21,6 +21,16 @@ Steps that use `common` are skipped, because shared screens are re-checked once 
 """
 import argparse, json, os, sys
 
+try:
+    import journal as _journal
+except Exception:
+    _journal = None
+
+def _jlog(ws, text, **m):
+    if _journal:
+        _journal.event(ws, text, **m)
+
+
 SNIPPET = r"""(()=>{const sel='a,button,input,select,textarea,th,label,h1,h2,h3,[role=button],[role=tab],[role=menuitem]';
 const els=[...document.querySelectorAll(sel)].filter(e=>{const r=e.getBoundingClientRect();
  return r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight&&!e.closest('tbody')});
@@ -91,6 +101,7 @@ def cmd_compare(a):
     if unknown:
         print(f"no stored fingerprint for: {', '.join(unknown)} (use set-fp to store them)")
     print(f"{a.module}: {same} unchanged, {len(changed)} changed")
+    _jlog(a.ws, f"Update check on {a.module}: {same} unchanged, {len(changed)} changed")
     if a.apply and changed:
         for _, st in changed:
             st["stale"] = True

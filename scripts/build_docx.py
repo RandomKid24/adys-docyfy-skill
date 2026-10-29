@@ -25,6 +25,16 @@ from PIL import Image
 from build_pdf import before_lines, load_common, load_state, resolve_step, step_image
 from diagram import flow_png
 
+try:
+    import journal as _journal
+except Exception:
+    _journal = None
+
+def _jlog(ws, text, **m):
+    if _journal:
+        _journal.event(ws, text, **m)
+
+
 BOLD = re.compile(r"\*\*(.+?)\*\*")
 
 
@@ -266,6 +276,7 @@ def build(ws):
     out = os.path.join(ws, "final", "user-guide.docx")
     doc.save(out)
     print(out)
+    _jlog(ws, "Built Word guide")
     return out
 
 

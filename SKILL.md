@@ -14,7 +14,7 @@ Scripts are in `scripts/` next to this file. Python is the single line in the `.
 `pdf` PDF and cheat sheets (capture with `--no-video`). `video` MP4 recordings only (skip `build_pdf.py`). `gif` also makes a GIF per task, which is never made otherwise. `word` add `build_docx.py`. `site` add `build_site.py`. `all` everything. `draft|1080p|4k|8k` video quality, default 4k. `voice` narrated MP4. `hi`, `mr`, `en` set the languages (Hindi, Marathi, English), one video each. Words combine. A task or module name sets the scope. If words cover it, skip those intake questions. State what you will make in one line, then start.
 
 ## Step 0. Resume
-If a workspace exists (`guide-workspace/*/state.json`), run `progress.py status --ws W` and continue at the first unfinished module. Never re-ask what `state.json` answers. App changed after a release: `references/update.md`.
+If a workspace exists (`guide-workspace/*/state.json`), run `progress.py status --ws W` and continue at the first unfinished module. Read the top of `W/docyfy.md` first (summary, outputs, notes, change log). Read its Tasks section only for the module you are on. Never re-ask what `state.json` answers. App changed after a release: `references/update.md`.
 
 ## Step 1. Intake (one AskUserQuestion call, then never again)
 1. Scope: whole app, modules, or tasks. For tasks, build one module `tasks`, one feature per task, plain steps from first screen to the confirmation, each with a `before` box and a `fields` table if it has a form. Do not map the app. If no list was given for "staff" or "new users", propose 5 to 8 daily tasks to confirm.
@@ -32,7 +32,7 @@ Default: `references/fast-capture.md` (Playwright on this machine, needs no per-
 Videos and languages: read `references/video.md`. Native dropdowns (`select` steps) are drawn open automatically in both screenshots and videos. A PDF cannot play video, so never promise one inside it.
 
 ## Step 4. Finish
-Read `references/finish.md` (quick start, workflows, cheat sheets, check, build, deliver). Send files with SendUserFile and report module count, page count and anything skipped, not a recap.
+Read `references/finish.md` (quick start, workflows, cheat sheets, check, build, deliver). `docyfy.md` updates itself after every script. Record a decision or client request with `progress.py note --ws W --text "..."`. Send files with SendUserFile and report module count, page count and anything skipped, not a recap.
 
 ## Writing steps
 Read `references/readers.md` once before writing text. In short: one action per numbered mark, name the label exactly as shown, say where it is ("top right"), whole screen by default, at most one `tip` and one `warning` per step, no "simply" or "just". Module file format: `references/module-json.md`. Look and colours: `references/look.md`.

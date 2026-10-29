@@ -827,6 +827,14 @@ def cmd_run(a):
     sj = os.path.join(ws, "state.json")
     if os.path.exists(sj) and slug not in json.load(open(sj)).get("modules", {}):
         subprocess.run([sys.executable, os.path.join(HERE, "progress.py"), "add-module", "--ws", ws, "--slug", slug, "--title", mod["title"]], check=False)
+    try:
+        import journal
+        q = spec.get("quality", "4k") if not a.no_video else "no video"
+        journal.event(ws, "Captured " + ", ".join(f"{f['title']} ({len(f['steps'])} steps)" for f in feats) + f" into {slug}",
+                      base=spec.get("base"), env=spec.get("env"), viewport=spec.get("viewport"),
+                      langs=spec.get("langs") or ["en"], quality=q)
+    except Exception as e:
+        print(f"(journal skipped: {e})", file=sys.stderr)
     print(f"wrote {mp} in {time.time() - t0:.1f}s. Next: check_boxes.py, annotate.py, build_pdf.py module --slug {slug}")
 
 

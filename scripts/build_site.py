@@ -23,6 +23,16 @@ import theme
 from build_pdf import accent_hex, apply_brand, before_lines, load_common, load_state, md, resolve_step, step_image
 from diagram import flow_png
 
+try:
+    import journal as _journal
+except Exception:
+    _journal = None
+
+def _jlog(ws, text, **m):
+    if _journal:
+        _journal.event(ws, text, **m)
+
+
 CSS = """
 @font-face{font-family:'Plus Jakarta Sans';font-weight:400;src:url(assets/fonts/PlusJakartaSans-Regular.ttf)}@font-face{font-family:'Plus Jakarta Sans';font-weight:600;src:url(assets/fonts/PlusJakartaSans-SemiBold.ttf)}@font-face{font-family:'Plus Jakarta Sans';font-weight:700;src:url(assets/fonts/PlusJakartaSans-Bold.ttf)}@font-face{font-family:'Plus Jakarta Sans';font-weight:800;src:url(assets/fonts/PlusJakartaSans-ExtraBold.ttf)}:root{--a:%(accent)s;--ink:#231F20;--mut:#5F6571;--line:#d9d9da;--bg:#F2F7F9;--soft:#fff;--bone:#D6E7F1}
 *{box-sizing:border-box}body{margin:0;font:16px/1.7 'Plus Jakarta Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg)}
@@ -264,6 +274,7 @@ class Site:
         open(os.path.join(self.out, "index.html"), "w").write(self.page("Help", body, nav))
         open(os.path.join(self.out, "search-index.js"), "w").write("window.IDX=" + json.dumps(self.index, ensure_ascii=False) + ";")
         json.dump(self.helpmap, open(os.path.join(self.out, "help-map.json"), "w"), indent=2)
+        _jlog(self.ws, f"Built help site ({len(self.ready)} module pages, {len(self.helpmap)} help links)")
         print(f"{self.out}: {len(self.ready)} module pages, {len(self.helpmap)} help links, {len(self.copied)} assets")
 
 

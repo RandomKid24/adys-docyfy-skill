@@ -147,6 +147,7 @@ Everything goes in a workspace folder, so a stopped run picks up where it left o
 
 | Path | What is in it |
 | --- | --- |
+| `docyfy.md` | Memory file. App, outputs, every task with its steps, version and timestamps, a change log and notes |
 | `state.json` | Progress, brand settings, shared screenshots |
 | `modules/<name>.json` | One module's steps, marks, fields and common problems |
 | `shots/`, `annotated/` | Raw and highlighted screenshots |
@@ -159,6 +160,10 @@ Everything goes in a workspace folder, so a stopped run picks up where it left o
 ## Keeping the guide current
 
 When your app changes, ask Claude to update the guide. It compares saved page fingerprints, finds the screens that changed, and redoes only those. Help keys stay the same, so links from your app keep working.
+
+### Memory for the next agent
+
+Every script that finishes updates `docyfy.md` in the workspace. It holds the app, the outputs and when each was built, every task with its numbered steps, a version for each task, and a dated change log. When a step changes, the task goes up a version and the log says so. A new agent reads the top of the file and knows where things stand. Add your own notes with `progress.py note --ws W --text "Client wants Hindi on all videos"`. `journal.json` holds the full history.
 
 ## Linking help from your app
 

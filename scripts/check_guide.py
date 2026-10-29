@@ -13,6 +13,16 @@ without them the OCR pass is skipped with a note.
 """
 import argparse, json, os, re, sys
 
+try:
+    import journal as _journal
+except Exception:
+    _journal = None
+
+def _jlog(ws, text, **m):
+    if _journal:
+        _journal.event(ws, text, **m)
+
+
 EMAIL = re.compile(r"[\w.+-]+@([\w-]+\.)+[A-Za-z]{2,}")
 PHONE = re.compile(r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)")
 PAN = re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b")
@@ -165,6 +175,7 @@ def main():
                 warn(rel, f"readable {kind} ({mask(val)}) in the screenshot; add a blur mark over it")
 
     print(f"{len(slugs)} modules reviewed: {errors} errors, {warns} warnings")
+    _jlog(a.ws, f"Checked {len(slugs)} modules: {errors} errors, {warns} warnings")
     sys.exit(1 if errors else 0)
 
 

@@ -25,6 +25,16 @@ from reportlab.platypus import Paragraph
 import annotate as ann
 import build_pdf as bp
 
+try:
+    import journal as _journal
+except Exception:
+    _journal = None
+
+def _jlog(ws, text, **m):
+    if _journal:
+        _journal.event(ws, text, **m)
+
+
 W, H = A4
 MARG, GAP = 12 * mm, 6 * mm
 CARD_W = (W - 2 * MARG - GAP) / 2
@@ -209,6 +219,7 @@ def main():
         with open(merged, "wb") as f:
             w.write(f)
         print(f"{merged} ({len(made)} sheets)")
+        _jlog(a.ws, f"Built {len(made)} cheat sheets")
 
 
 if __name__ == "__main__":

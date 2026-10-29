@@ -25,6 +25,16 @@ from reportlab.platypus import (CondPageBreak, Image as RLImage, KeepTogether, P
                                 SimpleDocTemplate, Spacer, Table, TableStyle)
 
 import theme as _theme
+
+try:
+    import journal as _journal
+except Exception:
+    _journal = None
+
+def _jlog(ws, text, **m):
+    if _journal:
+        _journal.event(ws, text, **m)
+
 _T = _theme.tokens()
 ACCENT = colors.HexColor(_T["signal"])
 INK = colors.HexColor(_T["ink"])
@@ -369,6 +379,7 @@ def build_module(ws, slug, force=False):
     with open(hp, "w") as f:
         f.write(hv)
     print(f"{slug}: built ({len(PdfReader(out).pages)} pages)")
+    _jlog(ws, f"Built PDF module {slug} ({len(PdfReader(out).pages)} pages)")
     return out
 
 
@@ -503,6 +514,7 @@ def build_final(ws):
     with open(out, "wb") as f:
         w.write(f)
     print(f"{out}: {len(w.pages)} pages, {len(ready)} modules")
+    _jlog(ws, f"Built final PDF ({len(w.pages)} pages, {len(ready)} modules)")
     build_html(ws, state, ready)
     return out
 
