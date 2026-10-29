@@ -163,6 +163,10 @@ When your app changes, ask Claude to update the guide. It compares saved page fi
 
 Every script that finishes updates `docyfy.md` in the workspace. It holds the app, the outputs and when each was built, every task with its numbered steps, a version for each task, and a dated change log. When a step changes, the task goes up a version and the log says so. A new agent reads the top of the file and knows where things stand. Add your own notes with `progress.py note --ws W --text "Client wants Hindi on all videos"`. `journal.json` holds the full history.
 
+## Claude in Chrome as a scout
+
+For long or confusing flows, Claude can first walk the task in your own signed-in Chrome with the Claude in Chrome extension. It scrolls, opens every tab and wizard section, and notes each field. It writes the spec from that. Then `capture.py` takes the sharp screenshots and videos. Chrome is for learning the flow, `capture.py` is for the pictures. Details are in `references/scout.md`.
+
 ## Finding every field
 
 `capture.py fields --url PAGE` prints every field on the page, whole page, marked REQUIRED or optional, with the tabs and the buttons at the bottom. Add `--json out.json` to get a starting `fields` table for the guide. The checker warns when a task ends on Next, never says what the reader sees at the end, or leaves a field without required or optional.

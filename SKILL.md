@@ -29,6 +29,7 @@ Then `progress.py init --ws W --app NAME --url URL [--accent "#RRGGBB"] [--logo 
 
 ## Step 3. Capture, one module at a time
 Default: `references/fast-capture.md` (Playwright on this machine, needs no per-click round trips). If the app is not reachable from here (SSO, captcha, private network, no Playwright): `references/browser-capture.md`, then `references/capture.md`.
+Flow unclear, long, or many tabs and wizard sections: scout it first in the person's signed-in Chrome with Claude in Chrome (`references/scout.md`), then capture from the spec you wrote.
 Videos and languages: read `references/video.md`. Native dropdowns (`select` steps) are drawn open automatically in both screenshots and videos. A PDF cannot play video, so never promise one inside it.
 
 ## Step 4. Finish
