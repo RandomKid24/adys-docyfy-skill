@@ -1,10 +1,42 @@
 {
   "name": "docyfy",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Installs the docyfy skill into the AI tools on your machine",
-  "bin": { "docyfy": "bin/install.js" },
-  "files": ["bin", "SKILL.md", "README.md", "requirements.txt", "assets", "references", "scripts"],
-  "engines": { "node": ">=16" },
+  "bin": {
+    "docyfy": "bin/install.js"
+  },
+  "files": [
+    "bin",
+    "SKILL.md",
+    "README.md",
+    "requirements.txt",
+    "assets",
+    "references",
+    "scripts"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/RandomKid24/adys-docyfy-skill.git" }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RandomKid24/adys-docyfy-skill.git"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "skill",
+    "user-guide",
+    "documentation",
+    "screenshots",
+    "playwright",
+    "docyfy"
+  ],
+  "homepage": "https://github.com/RandomKid24/adys-docyfy-skill#readme",
+  "bugs": {
+    "url": "https://github.com/RandomKid24/adys-docyfy-skill/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

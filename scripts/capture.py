@@ -4,6 +4,8 @@ boxes are measured exactly, and the video is edited as it records. No per-click 
 
   capture.py login   --url URL --out ws/.auth/state.json     you sign in yourself, in a real window
   capture.py explore --url URL [--state S] [--wait CSS]       list clickable things as text (no images)
+  capture.py update  --ws W [--no-video]   run the saved specs again, redo only tasks whose screens changed
+  capture.py chrome  [--url URL]    open a Chrome with a saved profile to sign in once; then set DOCYFY_CDP=1 to reuse it
   capture.py fields  --url URL [--state S] [--click CSS ...] [--json out.json]   every field on a page with required or optional
   capture.py run     --ws W --spec spec.json [--no-video]     do the tasks, write shots, boxes, GIFs
 
@@ -57,8 +59,46 @@ def pw():
             "pip install playwright && python -m playwright install chromium")
 
 
+CDP_PORT = 9222
+CHROME_PROFILE = os.path.expanduser("~/.docyfy/chrome")
+
+
+def chrome_path():
+    for c in ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
+              "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"):
+        if os.path.exists(c):
+            return c
+    return shutil.which("google-chrome") or shutil.which("chromium")
+
+
+def cdp_state(br):
+    """Sign-ins (cookies and local storage) from the open Chrome, so a new sharp context starts signed in."""
+    try:
+        return br.contexts[0].storage_state() if br.contexts else None
+    except Exception:
+        return None
+
+
+def cmd_chrome(a):
+    """Start a Chrome with its own saved profile and a debug port. Sign in there once. Capture then reuses it."""
+    exe = chrome_path()
+    if not exe:
+        die("Google Chrome was not found. Install it, then run this again.")
+    os.makedirs(CHROME_PROFILE, exist_ok=True)
+    subprocess.Popen([exe, f"--remote-debugging-port={CDP_PORT}", f"--user-data-dir={CHROME_PROFILE}", "--no-first-run", a.url or "about:blank"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"Chrome is open with a saved profile at {CHROME_PROFILE}. Sign in to your app in that window and leave it open.\n"
+          "Then run capture with the environment variable DOCYFY_CDP=1 (the skill does this when you ask it to use your open Chrome).")
+
+
 def launch(p, headless=True):
-    """Use the Chrome already installed on this computer. Fall back to Playwright's own Chromium."""
+    """Use the Chrome already installed on this computer. Fall back to Playwright's own Chromium.
+    With DOCYFY_CDP=1 it attaches to the Chrome opened by `capture.py chrome` instead."""
+    if os.environ.get("DOCYFY_CDP") and headless:
+        try:
+            return p.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
+        except Exception:
+            die("Could not reach the Chrome window. Run `capture.py chrome` first and leave that window open.")
     try:
         return p.chromium.launch(channel="chrome", headless=headless)
     except Exception:
@@ -295,7 +335,7 @@ def cmd_fields(a):
     sp = pw()()
     with sp as p:
         br = launch(p)
-        ctx = br.new_context(storage_state=a.state if a.state and os.path.exists(a.state) else None, viewport={"width": 1440, "height": 900})
+        ctx = br.new_context(storage_state=(cdp_state(br) if os.environ.get("DOCYFY_CDP") else None) or (a.state if a.state and os.path.exists(a.state) else None), viewport={"width": 1440, "height": 900})
         page = ctx.new_page()
         page.goto(a.url, wait_until="networkidle")
         for c in (a.click or []):          # open a tab or section first, then list again
@@ -327,7 +367,7 @@ def cmd_explore(a):
     sp = pw()()
     with sp as p:
         br = launch(p)
-        ctx = br.new_context(storage_state=a.state if a.state and os.path.exists(a.state) else None,
+        ctx = br.new_context(storage_state=(cdp_state(br) if os.environ.get("DOCYFY_CDP") else None) or (a.state if a.state and os.path.exists(a.state) else None),
                              viewport={"width": 1440, "height": 900})
         page = ctx.new_page()
         page.goto(a.url, wait_until="networkidle")
@@ -361,7 +401,7 @@ def launch_ctx(p, spec, task_dir, video, dpr=2):
     vw, vh = spec.get("viewport", [1440, 900])
     state = spec.get("state")
     kw = dict(viewport={"width": vw, "height": vh}, device_scale_factor=dpr,
-              storage_state=state if state and os.path.exists(state) else None)
+              storage_state=(cdp_state(br) if os.environ.get("DOCYFY_CDP") else None) or (state if state and os.path.exists(state) else None))
     if video:
         kw.update(record_video_dir=task_dir, record_video_size={"width": min(vw, 1280), "height": int(min(vw, 1280) * vh / vw)})
     return br, br.new_context(**kw)
@@ -749,14 +789,34 @@ def run_task(p, spec, ws, task, video, accent):
                     boxes.append(dd["rows"][dd["row"]])
             out["image"] = os.path.relpath(png, ws)
             try:
+                if dd:
+                    raise StopIteration     # the open list is drawn only in that one screenshot
                 from PIL import Image, ImageStat
-                im_ = Image.open(png).convert("L")
-                k_ = im_.width / (spec.get("viewport") or [1440, 900])[0]
-                for m_, b_ in zip(marks_in, boxes):
-                    c_ = im_.crop((int(b_[0] * k_), int(b_[1] * k_), int((b_[0] + b_[2]) * k_), int((b_[1] + b_[3]) * k_)))
-                    if c_.width > 8 and c_.height > 8 and ImageStat.Stat(c_).stddev[0] < 1.5:
+
+                def flat_(path, bx):
+                    im_ = Image.open(path).convert("L")
+                    k_ = im_.width / vw
+                    c_ = im_.crop((int(bx[0] * k_), int(bx[1] * k_), int((bx[0] + bx[2]) * k_), int((bx[1] + bx[3]) * k_)))
+                    return c_.width > 8 and c_.height > 8 and ImageStat.Stat(c_).stddev[0] < 1.5
+
+                for n_, (m_, b_) in enumerate(zip(marks_in, boxes)):
+                    if m_.get("style") == "blur" or m_["target"] == "(option)" or not flat_(png, b_):
+                        continue
+                    # the ring sits on empty pixels: wait for the page to settle, measure again, try the raw element too
+                    page.wait_for_timeout(500)
+                    for fit_ in (True, False):
+                        try:
+                            b2_ = box_of(page, m_["target"], fit_)
+                        except Exception:
+                            continue
+                        page.screenshot(path=png)
+                        if not flat_(png, b2_):
+                            boxes[n_] = b2_
+                            print(f"  fixed: {slug} step {i}: {m_['target']} was on empty pixels, moved the ring" , file=sys.stderr)
+                            break
+                    else:
                         print(f"  note: {slug} step {i}: {m_['target']} looks empty on screen. Fine for a blank field. "
-                              "If it should show something, the page may have shifted or the selector is wrong.", file=sys.stderr)
+                              "If it should show something, the selector is wrong.", file=sys.stderr)
             except Exception:
                 pass
             marks = [{"n": n + 1, "box": b, "style": m.get("style", "rect"), **({"pad": m["pad"]} if "pad" in m else {})} for n, (m, b) in enumerate(zip(marks_in, boxes))]
@@ -926,6 +986,13 @@ def cmd_run(a):
         spec["app"] = json.load(open(state_json)).get("app") or ""
     if spec.get("state") and not os.path.isabs(spec["state"]):
         spec["state"] = os.path.join(ws, spec["state"])
+    try:   # keep the spec so `update` can run it again later
+        os.makedirs(os.path.join(ws, "specs"), exist_ok=True)
+        keep = os.path.join(ws, "specs", f"{spec.get('module', 'tasks')}.json")
+        if not a.only:
+            json.dump(spec, open(keep, "w"), indent=1, ensure_ascii=False)
+    except Exception:
+        pass
     sp = pw()()
     feats = []
     t0 = time.time()
@@ -965,14 +1032,62 @@ SAMPLES = {"en": "Open Leave type and choose Sick leave. The box now shows your 
            "mr": "रजेचा प्रकार उघडा आणि आजारपणाची रजा निवडा. आता बॉक्समध्ये तुमची निवड दिसते."}
 
 
-def cmd_voices(a):
-    """Make one audio sample per language with the same voice chain the videos use, so you can hear it first."""
-    os.makedirs(a.out, exist_ok=True)
-    for lg in a.langs.split(","):
-        f = speak(SAMPLES.get(lg, SAMPLES["en"]), os.path.join(a.out, f"voice-{lg}"), None, 170, lg)
-        print(f"{lg}: {f}" if f else f"{lg}: no voice engine worked (install edge-tts, or use a Mac, or set DOCYFY_TTS_CMD)")
-    if _edge_broken:
-        print("edge-tts did not work (not installed or no internet), so a fallback voice was used where one existed.")
+def cmd_update(a):
+    """Run every saved spec again and redo only the tasks whose screens changed."""
+    import glob
+    from PIL import Image, ImageChops
+    ws = a.ws
+    specs = sorted(glob.glob(os.path.join(ws, "specs", "*.json")))
+    if not specs:
+        die(f"No saved specs in {ws}/specs. Run `capture.py run` once first so there is something to compare.")
+    old = os.path.join(ws, ".update-old")
+    shutil.rmtree(old, ignore_errors=True)
+    shutil.copytree(os.path.join(ws, "shots"), old)
+    changed, broken = [], []
+    for sf in specs:
+        spec = json.load(open(sf))
+        ns = argparse.Namespace(spec=sf, ws=ws, no_video=True, only=None)
+        try:
+            cmd_run(ns)
+        except (Exception, SystemExit) as e:
+            print(f"BROKEN in {os.path.basename(sf)}: {str(e)[:200]}\nA button or field the spec points at is gone or renamed. Fix the target in {sf}, then run update again.")
+            broken.append(sf)
+            continue
+        for task in spec["tasks"]:
+            diff = 0.0
+            for k in range(1, len(task["steps"]) + 1):
+                new_p, old_p = os.path.join(ws, "shots", f"{task['slug']}-{k}.png"), os.path.join(old, f"{task['slug']}-{k}.png")
+                if not os.path.exists(old_p) or not os.path.exists(new_p):
+                    continue
+                A, B = Image.open(old_p).convert("L"), Image.open(new_p).convert("L")
+                if A.size != B.size:
+                    diff = max(diff, 1.0)
+                    continue
+                d = ImageChops.difference(A, B).point(lambda v: 255 if v > 10 else 0)
+                diff = max(diff, float((__import__('numpy').asarray(d.resize((160, 100))) > 0).mean()))
+            if diff > a.threshold:
+                changed.append((sf, task["slug"], diff))
+    if broken:
+        print("Stopped: fix the broken specs first. The old screenshots are still in " + old)
+        return
+    shutil.rmtree(old, ignore_errors=True)
+    if not changed:
+        print("Nothing changed. The guide is still current.")
+        try:
+            import journal
+            journal.event(ws, "Update check: no screens changed")
+        except Exception:
+            pass
+        return
+    for sf, slug, diff in changed:
+        print(f"changed: {slug} ({diff:.1%} of the screen differs). Rendering the video again.")
+        cmd_run(argparse.Namespace(spec=sf, ws=ws, no_video=a.no_video, only=slug))
+    try:
+        import journal
+        journal.event(ws, "Update: redid " + ", ".join(s for _, s, _ in changed) + ". Rebuild the PDF, site and Word file, then check wording.")
+    except Exception:
+        pass
+    print("Changed tasks: " + ", ".join(s for _, s, _ in changed) + ". Next: annotate.py, then rebuild the outputs and check the step text still matches.")
 
 
 def use_skill_python():
@@ -995,6 +1110,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("login"); s.add_argument("--url", required=True); s.add_argument("--out", required=True); s.set_defaults(f=cmd_login)
     s = sub.add_parser("explore"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--wait"); s.set_defaults(f=cmd_explore)
+    s = sub.add_parser("update"); s.add_argument("--ws", required=True); s.add_argument("--no-video", action="store_true"); s.add_argument("--threshold", type=float, default=0.01); s.set_defaults(f=cmd_update)
+    s = sub.add_parser("chrome"); s.add_argument("--url", default=""); s.set_defaults(f=cmd_chrome)
     s = sub.add_parser("fields"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--click", action="append"); s.add_argument("--json"); s.set_defaults(f=cmd_fields)
     s = sub.add_parser("run"); s.add_argument("--ws", required=True); s.add_argument("--spec", required=True)
     s.add_argument("--no-video", action="store_true"); s.add_argument("--only"); s.set_defaults(f=cmd_run)

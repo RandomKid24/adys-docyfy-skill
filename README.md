@@ -88,6 +88,8 @@ Type `/docyfy` and add words to pick the output.
 | `/docyfy word` | Word file |
 | `/docyfy site` | Help site |
 | `/docyfy all` | Everything above |
+| `/docyfy update` | Redo only the tasks whose screens changed |
+| `/docyfy chrome` | Capture with your own Chrome, signed in once |
 | `/docyfy video punch-in 4k` | A 4K video of one task |
 
 Words combine (`/docyfy pdf video`). Add `draft`, `1080p`, `4k` or `8k` to set video quality. Or just describe it in plain language:
@@ -157,11 +159,17 @@ Everything goes in a workspace folder, so a stopped run picks up where it left o
 
 ## Keeping the guide current
 
-When your app changes, ask Claude to update the guide. It compares saved page fingerprints, finds the screens that changed, and redoes only those. Help keys stay the same, so links from your app keep working.
+When your app changes, run `/docyfy update`. `capture.py update` runs the saved specs again, compares screenshots, and redoes only tasks where the screen differs. A broken target stops it and names the spec to fix.
+
+Or ask Claude to update the guide. It compares saved page fingerprints, finds the screens that changed, and redoes only those. Help keys stay the same, so links from your app keep working.
 
 ### Memory for the next agent
 
 Every script that finishes updates `docyfy.md` in the workspace. It holds the app, the outputs and when each was built, every task with its numbered steps, a version for each task, and a dated change log. When a step changes, the task goes up a version and the log says so. A new agent reads the top of the file and knows where things stand. Add your own notes with `progress.py note --ws W --text "Client wants Hindi on all videos"`. `journal.json` holds the full history.
+
+## Your own Chrome
+
+`capture.py chrome --url https://your-app` opens Chrome with a saved profile at `~/.docyfy/chrome`. Sign in once, including single sign-on or two-step codes, and leave the window open. With `DOCYFY_CDP=1`, capture, `explore` and `fields` start signed in as you. The skill still never types your password. Chrome 136 and newer only allow this with a separate profile, which is why the window has its own sign-in.
 
 ## Claude in Chrome as a scout
 

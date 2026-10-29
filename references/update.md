@@ -11,3 +11,7 @@ Use this when a guide already exists and the app has changed. Do not rebuild eve
 
 A changed fingerprint can be a false alarm (a heading with a record count, say). Re-capturing one extra step is cheap, so prefer a false alarm over a missed change. If a screen cannot be reached any more, set the module note and tell the user.
 
+
+
+## Fast path: capture.py update
+If the workspace has `specs/` (made by `capture.py run`), run `capture.py update --ws W`. It runs every saved spec again, compares the new screenshots with the old, and renders videos again only for tasks where more than 1% of the screen differs. If a button or field is gone it stops and names the spec to fix. Afterwards run `annotate.py`, rebuild the PDF, site and Word file, and check the step text still matches the screens. `docyfy.md` records the update.
