@@ -187,6 +187,10 @@ class Site:
                 g = self.asset(feat["gif"])
                 if g:
                     body.append(f"<p><img loading=lazy src='{g}' alt='Animated walkthrough of {html.escape(feat['title'])}'></p>")
+            elif feat.get("video"):
+                g = self.asset(feat["video"])
+                if g:
+                    body.append(f"<p><video controls muted playsinline preload=metadata src='{g}' aria-label='Video walkthrough of {html.escape(feat['title'])}' style='max-width:100%'></video></p>")
             bl = before_lines(feat)
             if bl:
                 body.append("<div class=tip><b>Before you start</b><br>" + "<br>".join(f"<b>{html.escape(a)}:</b> {md(b)}" for a, b in bl) + "</div>")

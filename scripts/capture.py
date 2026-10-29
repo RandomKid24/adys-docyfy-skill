@@ -27,6 +27,7 @@ Studio engine (default): captures sharp stills of each page state, then draws th
 and fades itself at 60 fps. "quality": "4k" (default, 3840x2160 at 60 fps) | "1080p" | "draft" (1080p at 30 fps, fast,
 use while checking) | "8k". "engine": "live" goes back to screen-recording the browser. On a Mac the hardware
 encoder is used when ffmpeg has it. DOCYFY_PRESET=fast|medium trades render time for smaller files.
+GIF: not made unless the spec has "gif": true. Videos are MP4 only by default.
 Look of the video: a title card and an end card ("cards": false removes them), a "Step 2 of 4" chip in the
 caption, and a smooth zoom toward each click target ("zoom": false removes it, "zoom_level": 1.3 sets how much).
 Voice: add "voice": true (or {"name": "Rishi", "rate": 170}) to the spec header and each step's text is read
@@ -763,9 +764,12 @@ def run_task(p, spec, ws, task, video, accent):
             mp4 = os.path.join(gifs, f"{name}.mp4")
             print(f"rendering {name} ({lg}) at {S.quality} ...", file=sys.stderr)
             if S.render(mp4, intro, outro, voice_tail=0.2, lang=lg):
-                g = make_gif(mp4, os.path.join(gifs, f"{name}.gif"))
-                if g and n_ == 0:
-                    feat["gif"] = os.path.relpath(g, ws)
+                if n_ == 0:
+                    feat["video"] = os.path.relpath(mp4, ws)
+                if spec.get("gif"):             # a GIF only when asked for
+                    g = make_gif(mp4, os.path.join(gifs, f"{name}.gif"))
+                    if g and n_ == 0:
+                        feat["gif"] = os.path.relpath(g, ws)
     elif video and vpath and os.path.exists(vpath):
         cards = None
         if spec.get("cards", True) and shutil.which("ffmpeg"):
@@ -778,8 +782,13 @@ def run_task(p, spec, ws, task, video, accent):
         g = to_gif(vpath, os.path.join(gifs, f"{slug}.gif"), os.path.join(gifs, f"{slug}.mp4"),
                    title=spec.get("app") or task["title"], framed=spec.get("frame", True), clips=clips,
                    zooms=zooms if spec.get("zoom", True) else None, zmax=float(spec.get("zoom_level", 1.3)), cards=cards)
-        if g:
+        mp4 = os.path.join(gifs, f"{slug}.mp4")
+        if os.path.exists(mp4):
+            feat["video"] = os.path.relpath(mp4, ws)
+        if g and spec.get("gif"):
             feat["gif"] = os.path.relpath(g, ws)
+        elif g and os.path.exists(g):
+            os.remove(g)
     shutil.rmtree(tmp, ignore_errors=True)
     return feat
 

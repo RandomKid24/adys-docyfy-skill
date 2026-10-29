@@ -199,7 +199,7 @@ def watch_box(feat, mod_slug, state):
     """A PDF cannot play a GIF. When the help site has a public address, show a link and a QR code
     to the recording there. Without an address, show nothing (a local file path helps nobody)."""
     base = ((state.get("brand") or {}).get("site_url") or "").rstrip("/")
-    if not feat.get("gif") or not base:
+    if not (feat.get("video") or feat.get("gif")) or not base:
         return []
     url = f"{base}/{mod_slug}.html#{_slug(feat.get('help_key') or feat['title'])}"
     text = Paragraph(f'<b>Watch this as a short video</b><br/><font color="{accent_hex()}"><u><a href="{html.escape(url)}">{html.escape(url)}</a></u></font>', S["tip"])
@@ -533,6 +533,8 @@ def build_html(ws, state, ready):
                 parts.append(f"<p>{html.escape(feat['goal'])}</p>")
             if feat.get("gif") and os.path.exists(os.path.join(ws, feat["gif"])):
                 parts.append(f"<p><img src='../{html.escape(feat['gif'])}' alt='animated walkthrough'></p>")
+            elif feat.get("video") and os.path.exists(os.path.join(ws, feat["video"])):
+                parts.append(f"<p><video controls muted playsinline preload=metadata src='../{html.escape(feat['video'])}' style='max-width:100%'></video></p>")
             bl = before_lines(feat)
             if bl:
                 parts.append("<div class=tip><b>Before you start</b><br>" + "<br>".join(f"<b>{html.escape(a)}:</b> {md(b)}" for a, b in bl) + "</div>")

@@ -11,7 +11,7 @@ Make guides that tell a non-technical reader exactly where to click. Scripts do 
 Scripts are in `scripts/` next to this file. Python is the single line in the `.python` file here if it exists, else `python3`. Run `<python> <skill-dir>/scripts/<name>.py`. If a package is missing and there is no `.python`, run `python3 -m venv ~/.docyfy/venv`, `~/.docyfy/venv/bin/pip install -r <skill-dir>/requirements.txt`, and write that interpreter path into `.python`. Never use `--break-system-packages`.
 
 ## Words after /docyfy
-`pdf` PDF and cheat sheets (capture with `--no-video`). `video` recordings only (skip `build_pdf.py`). `word` add `build_docx.py`. `site` add `build_site.py`. `all` everything. `draft|1080p|4k|8k` video quality, default 4k. `voice` narrated MP4. `hi`, `mr`, `en` set the languages (Hindi, Marathi, English), one video each. Words combine. A task or module name sets the scope. If words cover it, skip those intake questions. State what you will make in one line, then start.
+`pdf` PDF and cheat sheets (capture with `--no-video`). `video` MP4 recordings only (skip `build_pdf.py`). `gif` also makes a GIF per task, which is never made otherwise. `word` add `build_docx.py`. `site` add `build_site.py`. `all` everything. `draft|1080p|4k|8k` video quality, default 4k. `voice` narrated MP4. `hi`, `mr`, `en` set the languages (Hindi, Marathi, English), one video each. Words combine. A task or module name sets the scope. If words cover it, skip those intake questions. State what you will make in one line, then start.
 
 ## Step 0. Resume
 If a workspace exists (`guide-workspace/*/state.json`), run `progress.py status --ws W` and continue at the first unfinished module. Never re-ask what `state.json` answers. App changed after a release: `references/update.md`.
@@ -19,7 +19,7 @@ If a workspace exists (`guide-workspace/*/state.json`), run `progress.py status 
 ## Step 1. Intake (one AskUserQuestion call, then never again)
 1. Scope: whole app, modules, or tasks. For tasks, build one module `tasks`, one feature per task, plain steps from first screen to the confirmation, each with a `before` box and a `fields` table if it has a form. Do not map the app. If no list was given for "staff" or "new users", propose 5 to 8 daily tasks to confirm.
 2. Where to capture, in this order. Local (`localhost`), staging or demo link, production only as last resort and strictly look-only with real data blurred. On local or staging, use test credentials the user typed or the project's seed files, and never repeat them back. On production or unknown sites, the person signs in themselves. Never type real passwords or payment details.
-3. Extras, if the words did not say: GIFs, Word, help site.
+3. Extras, if the words did not say: Word, help site. Videos are MP4 only. Offer a GIF only if they ask.
 4. Audience and language, accent colour (hex), logo, blur real data (default yes).
 
 Then `progress.py init --ws W --app NAME --url URL [--accent "#RRGGBB"] [--logo path] [--gifs]`. On local or staging, create, edit and delete test records freely with obvious sample data. On production, stop before the final confirm click.

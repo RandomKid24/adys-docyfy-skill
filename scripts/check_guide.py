@@ -122,8 +122,9 @@ def main():
                 warn(where, f"{len(steps)} steps; readers lose their place past about 12, so split it")
             if (feat.get("fields") or len(steps) >= 4) and not feat.get("before"):
                 warn(where, "no `before` box (where it is in the menu, who can do it, what to have ready); forms and long tasks need one")
-            if feat.get("gif") and not os.path.exists(os.path.join(a.ws, feat["gif"])):
-                warn(where, f"GIF {feat['gif']} not found; the HTML page will skip it")
+            for key in ("video", "gif"):
+                if feat.get(key) and not os.path.exists(os.path.join(a.ws, feat[key])):
+                    warn(where, f"{key} {feat[key]} not found; the HTML page will skip it")
             for si, st in enumerate(steps):
                 w = f"{where} step {si + 1}"
                 if "common" in st:

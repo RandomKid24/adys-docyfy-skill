@@ -8,7 +8,7 @@ You can get any of these:
 - A Word file
 - A one-page cheat sheet per module
 - A searchable help site you can host, with a `help-map.json` to link from inside your app
-- A 4K MP4 and a GIF for each task
+- A 4K MP4 for each task (and a GIF too, if you ask for one)
 
 Guides can cover the whole app, chosen modules, or single tasks like "how to punch in".
 
@@ -69,7 +69,8 @@ Type `/docyfy` and add words to pick the output.
 | --- | --- |
 | `/docyfy` | Claude asks what to make |
 | `/docyfy pdf` | PDF and cheat sheets |
-| `/docyfy video` | MP4 and GIF recordings only |
+| `/docyfy video` | MP4 recordings only |
+| `/docyfy video gif` | MP4 and a GIF for each task |
 | `/docyfy word` | Word file |
 | `/docyfy site` | Help site |
 | `/docyfy all` | Everything above |
@@ -135,7 +136,7 @@ Everything goes in a workspace folder, so a stopped run picks up where it left o
 | `state.json` | Progress, brand settings, shared screenshots |
 | `modules/<name>.json` | One module's steps, marks, fields and common problems |
 | `shots/`, `annotated/` | Raw and highlighted screenshots |
-| `gifs/` | MP4 and GIF recordings |
+| `gifs/` | MP4 recordings (and GIFs if asked) |
 | `final/user-guide.pdf` | The guide |
 | `final/user-guide.docx` | Word version |
 | `final/cheatsheets/` | One A4 page per module, plus `all.pdf` |

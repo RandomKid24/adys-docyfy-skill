@@ -206,9 +206,9 @@ def build(ws):
             if feat.get("goal"):
                 p = doc.add_paragraph()
                 add_runs(p, feat["goal"], 10.5, (0x6B, 0x72, 0x80))
-            if feat.get("gif"):
+            if feat.get("gif") or feat.get("video"):
                 p = doc.add_paragraph()
-                r = p.add_run(f"Animated version: {feat['gif']} (see final/guide.html)")
+                r = p.add_run(f"Video version: {feat.get('video') or feat['gif']} (see final/guide.html)")
                 r.font.size = Pt(9)
                 r.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
             bl = before_lines(feat)
