@@ -107,6 +107,12 @@ def box_of(page, target, fit=True):
     loc.wait_for(state="visible", timeout=8000)
     loc.scroll_into_view_if_needed(timeout=3000)
     b = loc.bounding_box()
+    for _ in range(8):             # wait until the element stops moving (scroll, animation, layout shift)
+        page.wait_for_timeout(120)
+        b2 = loc.bounding_box()
+        if b2 and b and all(abs(b2[k] - b[k]) < 1 for k in ("x", "y", "width", "height")):
+            break
+        b = b2
     if not b:
         raise RuntimeError(f"no box for {target}")
     if fit:
@@ -686,6 +692,17 @@ def run_task(p, spec, ws, task, video, accent):
                     marks_in.append({"target": "(option)", "style": "rect", "pad": 1.5})
                     boxes.append(dd["rows"][dd["row"]])
             out["image"] = os.path.relpath(png, ws)
+            try:
+                from PIL import Image, ImageStat
+                im_ = Image.open(png).convert("L")
+                k_ = im_.width / (spec.get("viewport") or [1440, 900])[0]
+                for m_, b_ in zip(marks_in, boxes):
+                    c_ = im_.crop((int(b_[0] * k_), int(b_[1] * k_), int((b_[0] + b_[2]) * k_), int((b_[1] + b_[3]) * k_)))
+                    if c_.width > 8 and c_.height > 8 and ImageStat.Stat(c_).stddev[0] < 1.5:
+                        print(f"  note: {slug} step {i}: {m_['target']} looks empty on screen. Fine for a blank field. "
+                              "If it should show something, the page may have shifted or the selector is wrong.", file=sys.stderr)
+            except Exception:
+                pass
             marks = [{"n": n + 1, "box": b, "style": m.get("style", "rect"), **({"pad": m["pad"]} if "pad" in m else {})} for n, (m, b) in enumerate(zip(marks_in, boxes))]
             marks += [{"box": b, "style": "blur"} for b in blur_boxes]
             out["marks"] = marks
