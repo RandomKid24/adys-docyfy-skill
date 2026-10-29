@@ -12,6 +12,20 @@ You can get any of these:
 
 Guides can cover the whole app, chosen modules, or single tasks like "how to punch in".
 
+## See it in action
+
+Everything below was made by Docyfy itself against a small demo HR app. Nothing was edited by hand.
+
+![A Docyfy video: title card, a cursor gliding to Punch in, a dropdown opening, and an end card](docs/demo.gif)
+
+The same task rendered in Hindi: [`docs/demo-hi.gif`](docs/demo-hi.gif). Full quality MP4s (1080p, 60 fps): [English](docs/demo.mp4) and [Hindi](docs/demo-hi.mp4). The skill renders 4K too, these are smaller to keep the repo light.
+
+| A highlighted step | A page of the PDF |
+| --- | --- |
+| ![A screenshot with a numbered ring on a dropdown and on the chosen option](docs/highlight.jpg) | ![A PDF page with a before-you-start box, a watch-video QR code, and a numbered screenshot](docs/guide-page.jpg) |
+
+The dropdown is drawn open because browsers do not show native lists in screenshots. The QR code in the PDF links to the video on your help site.
+
 ## What you need
 
 - Claude Code, or any tool that supports skills (see the table below).
