@@ -18,7 +18,7 @@ Repeat for each pending module. Do not hold more than one module in working memo
 
 ### Fast mode
 The biggest win is `capture.py` (see Fast capture above), which removes the browser round trips. When it cannot reach the app and the browser tools are the only way, most of the time goes into driving the browser. Ways to cut it, in order of payoff:
-1. **Ask for scope.** Offer "main screens only": one screenshot per feature (the screen with its target marked) instead of one per click. Steps like "type your name" or "scroll down" need no picture. This alone halves the capture time.
+1. **Never drop steps for speed.** Every field, every Next and the final Save get their own step and picture. Speed comes from measuring and batching, not from skipping.
 2. **Measure in one call.** For each screen, run one `javascript_tool` call that returns the boxes of every target at once. Do not hunt for elements with several `find` calls.
 3. **Batch the clicks.** When the steps for a screen are known, use `browser_batch` to click and screenshot in one round trip.
 4. **Reuse.** Login, sidebar, search, pagination and delete-confirm come from `assets/common.json`. Do not capture them again.

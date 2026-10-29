@@ -81,7 +81,7 @@ Type `/docyfy` and add words to pick the output.
 
 | Command | You get |
 | --- | --- |
-| `/docyfy` | Claude asks what to make |
+| `/docyfy` | Shows a menu: what to make (PDF, videos, Word, site, cheat sheets) and what to do (whole app, chosen tasks, plan, update) |
 | `/docyfy pdf` | PDF and cheat sheets |
 | `/docyfy video` | MP4 recordings only |
 | `/docyfy video gif` | MP4 and a GIF for each task |
@@ -181,6 +181,10 @@ Without real numbers the score is a guess from menu order, button names (punch i
 ## Claude in Chrome as a scout
 
 For long or confusing flows, Claude can first walk the task in your own signed-in Chrome with the Claude in Chrome extension. It scrolls, opens every tab and wizard section, and notes each field. It writes the spec from that. Then `capture.py` takes the sharp screenshots and videos. Chrome is for learning the flow, `capture.py` is for the pictures. Details are in `references/scout.md`.
+
+## Every step, in order
+
+`capture.py draft --url FORM_URL --title "Add an employee"` opens the form and does it for real. It writes one step per field in page order, each Next click in a wizard, and the final Save, with sample data and required or optional in the text. Passwords and file uploads become look-only steps. Edit the words, keep the steps. On local and staging, `capture.py run` stops if a step only shows boxes and does nothing, or if the form's required fields are not all filled.
 
 ## Finding every field
 

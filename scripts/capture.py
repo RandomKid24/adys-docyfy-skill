@@ -6,6 +6,7 @@ boxes are measured exactly, and the video is edited as it records. No per-click 
   capture.py explore --url URL [--state S] [--wait CSS]       list clickable things as text (no images)
   capture.py update  --ws W [--no-video]   run the saved specs again, redo only tasks whose screens changed
   capture.py chrome  [--url URL]    open a Chrome with a saved profile to sign in once; then set DOCYFY_CDP=1 to reuse it
+  capture.py draft   --url FORM_URL --title T [--pre BUTTON ...] --out spec.json   a first spec that does every field, Next and Save in order
   capture.py fields  --url URL [--state S] [--click CSS ...] [--json out.json]   every field on a page with required or optional
   capture.py run     --ws W --spec spec.json [--no-video]     do the tasks, write shots, boxes, GIFs
 
@@ -32,9 +33,6 @@ encoder is used when ffmpeg has it. DOCYFY_PRESET=fast|medium trades render time
 GIF: not made unless the spec has "gif": true. Videos are MP4 only by default.
 Look of the video: a title card and an end card ("cards": false removes them), a "Step 2 of 4" chip in the
 caption, and a smooth zoom toward each click target ("zoom": false removes it, "zoom_level": 1.3 sets how much).
-Voice: add "voice": true (or {"name": "Rishi", "rate": 170}) to the spec header and each step's text is read
-aloud, Frappe style. The MP4 carries the voice, the GIF stays silent. Uses macOS `say` (default voice Rishi),
-else espeak-ng. Set DOCYFY_TTS_CMD='mytts "{text}" {out}' to use another engine.
 Safety: production is look-only (no click, fill, select, press). Password fields are never filled: sign in with
 the login command instead. Use sample data in fill values.
 """
@@ -328,6 +326,121 @@ FIELDS_JS = """() => {
   const tabs = [...document.querySelectorAll('[role=tab],.tab,[class*=step i] button,[class*=stepper i] li')].filter(vis).map(txt).filter(Boolean).slice(0, 14);
   return {fields: out, buttons: btns, tabs};
 }"""
+
+
+DRAFT_JS = """() => {
+  const vis = e => { const s = getComputedStyle(e); const r = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && (r.width > 2 || e.type === 'checkbox' || e.type === 'radio'); };
+  const txt = e => (e && (e.innerText || e.value) || '').replace(/\\s+/g, ' ').trim();
+  const uniq = s => { try { return document.querySelectorAll(s).length === 1; } catch (x) { return false; } };
+  const path = e => { const parts = []; for (; e && e.nodeType === 1 && e !== document.body; e = e.parentElement) { let i = 1, p = e; while ((p = p.previousElementSibling)) if (p.tagName === e.tagName) i++; parts.unshift(e.tagName.toLowerCase() + ':nth-of-type(' + i + ')'); } return 'body > ' + parts.join(' > '); };
+  const sel = e => { if (e.id && uniq('#' + CSS.escape(e.id))) return '#' + CSS.escape(e.id);
+    const n = e.getAttribute('name'); if (n && uniq(e.tagName.toLowerCase() + '[name="' + n + '"]')) return e.tagName.toLowerCase() + '[name="' + n + '"]';
+    const pl = e.getAttribute('placeholder'); if (pl && uniq(e.tagName.toLowerCase() + '[placeholder="' + pl + '"]')) return e.tagName.toLowerCase() + '[placeholder="' + pl + '"]';
+    return path(e); };
+  const fields = [];
+  document.querySelectorAll('input,select,textarea').forEach(e => {
+    if (['hidden', 'submit', 'button', 'reset', 'image'].includes(e.type) || !vis(e) || e.disabled || e.readOnly) return;
+    let lab = (e.id && txt(document.querySelector(`label[for="${CSS.escape(e.id)}"]`))) || txt(e.closest('label')) || e.getAttribute('aria-label') || '';
+    if (!lab) { let p = e.parentElement; for (let k = 0; k < 4 && p && !lab; k++, p = p.parentElement) { const l = p.querySelector('label,legend'); if (l && !l.contains(e)) lab = txt(l); } }
+    const req = !!(e.required || e.getAttribute('aria-required') === 'true' || /\\*\\s*$/.test(lab));
+    fields.push({sel: sel(e), label: (lab || e.placeholder || e.name || '').replace(/\\s*\\*\\s*$/, ''), type: e.tagName === 'SELECT' ? 'select' : (e.type || e.tagName.toLowerCase()),
+      required: req, placeholder: e.placeholder || '', y: e.getBoundingClientRect().top + scrollY,
+      options: e.tagName === 'SELECT' ? [...e.options].map(o => ({t: o.text.trim(), v: o.value, off: o.disabled || !o.value})) : undefined});
+  });
+  const btns = [...document.querySelectorAll('button,[type=submit],a[role=button],a.btn')].filter(vis).filter(b => !b.disabled).map(b => ({sel: sel(b), name: txt(b)})).filter(b => b.name && b.name.length < 40);
+  return {fields, btns};
+}"""
+
+SAMPLE = [
+    (r"e-?mail", "sample.user@example.com"), (r"phone|mobile|contact no|whatsapp", "9876543210"),
+    (r"pan\b", "ABCDE1234F"), (r"gst", "27ABCDE1234F1Z5"), (r"pin ?code|zip|postal", "422001"),
+    (r"first name", "Asha"), (r"last name|surname", "Patil"), (r"name", "Sample Name"),
+    (r"address", "12 Sample Street, Nashik"), (r"city", "Nashik"), (r"amount|salary|price|rate|cost", "5000"),
+    (r"quantity|qty|days|count|number|age", "2"), (r"reason|remark|note|comment|description|message", "Sample text for this guide."),
+]
+
+
+def sample_for(f):
+    t, lab = f["type"], (f["label"] + " " + f["placeholder"]).lower()
+    if t == "email": return "sample.user@example.com"
+    if t == "tel": return "9876543210"
+    if t == "date": return time.strftime("%Y-%m-%d")
+    if t == "time": return "10:00"
+    if t == "number": return "2"
+    if t == "url": return "https://example.com"
+    for pat, val in SAMPLE:
+        if re.search(pat, lab):
+            return val
+    return "Sample text" if t != "textarea" else "Sample text for this guide."
+
+
+ADVANCE = r"^(next|continue|proceed|save (and|&) (next|continue)|next step|next section)\b"
+FINISH = r"(save|submit|apply|create|add|send|register|finish|confirm|update|request)"
+
+
+def cmd_draft(a):
+    """Write a first spec that walks every field of a form, every Next, and the final Save, in order."""
+    sp = pw()()
+    with sp as p:
+        br = launch(p)
+        ctx = br.new_context(storage_state=(cdp_state(br) if os.environ.get("DOCYFY_CDP") else None) or (a.state if a.state and os.path.exists(a.state) else None),
+                             viewport={"width": 1440, "height": 900})
+        page = ctx.new_page()
+        page.goto(a.url, wait_until="networkidle")
+        steps, fields = [], []
+        origin = re.match(r"https?://[^/]+", a.url).group(0)
+        path = a.url[len(origin):] or "/"
+        for pre in (a.pre or []):                    # clicks needed to reach the form, such as the Add button
+            lab = pre
+            steps.append({"text": f"Click **{lab}**." if not pre.startswith(("#", ".", "[", "role=", "text=")) else "Click the button.",
+                          **({"goto": path} if not steps else {}), "click": pre if pre.startswith(("#", ".", "[", "role=", "text=")) else f'role=button[name="{pre}"]'})
+            page.locator(steps[-1]["click"]).first.click(timeout=6000)
+            page.wait_for_timeout(500)
+        for sec in range(1, 13):
+            d = page.evaluate(DRAFT_JS)
+            for f in d["fields"]:
+                if f["type"] == "password":
+                    steps.append({"text": f"Type your **{f['label']}**. Do it yourself, this guide never types it.", "look": True, "marks": [{"target": f["sel"]}]})
+                    continue
+                if f["type"] == "file":
+                    steps.append({"text": f"Click **{f['label']}** and choose a file from your computer.", "look": True, "marks": [{"target": f["sel"]}]})
+                    continue
+                need = "required" if f["required"] else "optional, you can leave it empty"
+                if f["type"] == "select":
+                    opts = [o for o in f["options"] if not o["off"]]
+                    if not opts:
+                        continue
+                    pick = opts[min(1, len(opts) - 1)]["t"] if len(opts) > 1 and not f["required"] else opts[0]["t"]
+                    steps.append({"text": f"Open **{f['label']}** ({need}) and choose **{pick}**.", "select": [f["sel"], pick]})
+                    page.locator(f["sel"]).first.select_option(label=pick)
+                elif f["type"] in ("checkbox", "radio"):
+                    steps.append({"text": f"Tick **{f['label']}** ({need}).", "click": f["sel"]})
+                    page.locator(f["sel"]).first.check()
+                else:
+                    val = sample_for(f)
+                    steps.append({"text": f"Click **{f['label']}** ({need}) and type {val}.", "fill": [f["sel"], val]})
+                    page.locator(f["sel"]).first.fill(val)
+                fields.append({"name": f["label"], "required": f["required"], "help": "", "example": ""})
+            adv = next((b for b in d["btns"] if re.search(ADVANCE, b["name"].lower())), None)
+            fin = next((b for b in reversed(d["btns"]) if re.search(FINISH, b["name"].lower()) and not re.search(r"cancel|back|clear|reset", b["name"].lower())), None)
+            if adv and not (fin and fin["name"] == adv["name"]):
+                steps.append({"text": f"Click **{adv['name']}**.", "click": adv["sel"]})
+                page.locator(adv["sel"]).first.click(timeout=6000)
+                page.wait_for_timeout(600)
+                continue
+            if fin:
+                steps.append({"text": f"Click **{fin['name']}**.", "click": fin["sel"], "warning": "This saves the record. Use test data on staging."})
+            break
+        br.close()
+    steps.append({"text": "You see the confirmation message. (Write what the screen shows here.)", "shot": True, "marks": [{"target": "text=" + (a.confirm or "success")}]})
+    if steps and "goto" not in steps[0]:
+        steps[0]["goto"] = path
+    spec = {"env": "staging", "base": origin, "viewport": [1440, 900], "quality": "draft",
+            "tasks": [{"slug": re.sub(r"[^a-z0-9]+", "-", a.title.lower()).strip("-"), "title": a.title, "goal": "", "before": {"menu": "", "role": "", "ready": []},
+                       "fields": fields, "steps": steps}]}
+    json.dump(spec, open(a.out, "w"), indent=1, ensure_ascii=False)
+    print(f"wrote {a.out}: {len(steps)} steps, {len(fields)} fields. It walks every field and every Next in order.\n"
+          "Now rewrite each step's text in plain words, add help and example to the fields, set the confirmation text, and run it.")
 
 
 def cmd_fields(a):
@@ -724,6 +837,29 @@ def make_gif(mp4, out_gif):
     return out_gif if os.path.exists(out_gif) else None
 
 
+def check_steps(task, env):
+    """On local and staging every step with a highlight must also do something, in order. Boxes with no action are not a guide."""
+    if env == "production":
+        return []
+    out, steps = [], task["steps"]
+    acts = ("click", "fill", "select", "press")
+    for i, st in enumerate(steps, 1):
+        if st.get("look"):
+            continue
+        has_act = any(k in st for k in acts)
+        if (st.get("marks") or st.get("shot")) and not has_act and i not in (1, len(steps)) and not st.get("wait"):
+            out.append(f"step {i} ({st.get('text', '')[:50]!r}) shows boxes but does nothing. Add click, fill or select, or set \"look\": true if it only points something out.")
+    fields = task.get("fields") or []
+    req = [f for f in fields if f.get("required")]
+    done = sum(1 for st in steps if "fill" in st or "select" in st)
+    if req and done < len(req):
+        out.append(f"{len(req)} fields are marked required but only {done} steps fill or select something.")
+    acted = [st for st in steps if any(k in st for k in acts)]
+    if fields and acted and not re.search(r"save|submit|apply|create|add|send|confirm|finish|done|punch|request|update", json.dumps(acted[-1]).lower()):
+        out.append("a task with a form must end on its Save or Submit click. The last action step is not one.")
+    return out
+
+
 def run_task(p, spec, ws, task, video, accent):
     env = spec.get("env", "staging")
     base = spec.get("base", "").rstrip("/")
@@ -744,6 +880,10 @@ def run_task(p, spec, ws, task, video, accent):
     else:
         br, ctx = launch_ctx(p, spec, tmp, video)
     page = ctx.new_page()
+    problems = check_steps(task, env)
+    if problems:
+        br.close()
+        die(f"{slug}: the steps skip the real work.\n  " + "\n  ".join(problems) + "\nDo every step in order. Use `capture.py draft` to start from every field.")
     steps_out = []
     cur = [vw * 0.5, vh * 0.62]     # where the on-screen cursor is
     voice = None      # narration was removed on purpose: videos are silent
@@ -1112,6 +1252,8 @@ def main():
     s = sub.add_parser("explore"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--wait"); s.set_defaults(f=cmd_explore)
     s = sub.add_parser("update"); s.add_argument("--ws", required=True); s.add_argument("--no-video", action="store_true"); s.add_argument("--threshold", type=float, default=0.01); s.set_defaults(f=cmd_update)
     s = sub.add_parser("chrome"); s.add_argument("--url", default=""); s.set_defaults(f=cmd_chrome)
+    s = sub.add_parser("draft"); s.add_argument("--url", required=True); s.add_argument("--title", required=True); s.add_argument("--out", default="spec.json")
+    s.add_argument("--state"); s.add_argument("--pre", action="append"); s.add_argument("--confirm", default=""); s.set_defaults(f=cmd_draft)
     s = sub.add_parser("fields"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--click", action="append"); s.add_argument("--json"); s.set_defaults(f=cmd_fields)
     s = sub.add_parser("run"); s.add_argument("--ws", required=True); s.add_argument("--spec", required=True)
     s.add_argument("--no-video", action="store_true"); s.add_argument("--only"); s.set_defaults(f=cmd_run)

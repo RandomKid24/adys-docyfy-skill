@@ -11,6 +11,7 @@ Make guides that tell a non-technical reader exactly where to click. Scripts do 
 Scripts are in `scripts/` next to this file. Python is the single line in the `.python` file here if it exists, else `python3`. Run `<python> <skill-dir>/scripts/<name>.py`. If a package is missing and there is no `.python`, run `python3 -m venv ~/.docyfy/venv`, `~/.docyfy/venv/bin/pip install -r <skill-dir>/requirements.txt`, and write that interpreter path into `.python`. Never use `--break-system-packages`.
 
 ## Words after /docyfy
+No words at all? Your first action is one AskUserQuestion call, before anything else, with two questions. What to make (multi-select): PDF guide, Videos, Word file, Help site, Cheat sheets. What to do: Guide the whole app, Guide chosen tasks, Plan what to guide first, Update an existing guide. Then continue from the answers.
 `pdf` PDF and cheat sheets (capture with `--no-video`). `video` MP4 recordings only (skip `build_pdf.py`). `gif` also makes a GIF per task, which is never made otherwise. `word` add `build_docx.py`. `site` add `build_site.py`. `all` everything. `plan` rank the tasks worth guiding first: run `plan.py --ws W --url APP [--usage usage.csv]`, show the top 8 in one line, ask which to build, then build the first tier. Ask once if they have support tickets or analytics counts for a usage file. `update` redo only what changed: run `capture.py update --ws W`, then rebuild the outputs (`references/update.md`). `chrome` capture with the person's own Chrome: run `capture.py chrome --url APP`, they sign in once, then set `DOCYFY_CDP=1` on every capture command. `draft|1080p|4k|8k` video quality, default 4k. `hi`, `mr`, `en` set the languages (Hindi, Marathi, English), one video each. Words combine. A task or module name sets the scope. If words cover it, skip those intake questions. State what you will make in one line, then start.
 
 ## Step 0. Resume
@@ -38,7 +39,8 @@ Read `references/finish.md` (quick start, workflows, cheat sheets, check, build,
 ## Writing steps
 Read `references/readers.md` once before writing text. In short: one action per numbered mark, name the label exactly as shown, say where it is ("top right"), whole screen by default, at most one `tip` and one `warning` per step, no "simply" or "just". Module file format: `references/module-json.md`. Look and colours: `references/look.md`.
 
-## Cover the whole task
+## Do every step, in order
+A guide is the task done for real, one step at a time. Boxes on a finished screen are not a guide. For a form or wizard, run `capture.py draft` (it makes one step per field, each Next, and the final Save), keep every step, and rewrite only the words. Fill, select and click for real on local or staging, ending on the final Save or Submit and the confirmation. `run` refuses steps that only show boxes.
 Never skip. Run `capture.py fields --url PAGE` first. It lists every field on the page, including ones below the fold, each marked REQUIRED or optional, plus the tabs or sections. For a multi-section form or a wizard, rerun with `--click` on each tab. Then:
 - Walk every section in order and end on the final Save or Submit and the confirmation the reader sees. A task that ends on "Next" is unfinished.
 - Put every field in the `fields` table with `required` true or false, and say in the step text which boxes can be left empty.
