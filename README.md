@@ -88,6 +88,7 @@ Type `/docyfy` and add words to pick the output.
 | `/docyfy word` | Word file |
 | `/docyfy site` | Help site |
 | `/docyfy all` | Everything above |
+| `/docyfy plan` | Ranks tasks by how much people need them, so you build the useful guides first |
 | `/docyfy update` | Redo only the tasks whose screens changed |
 | `/docyfy chrome` | Capture with your own Chrome, signed in once |
 | `/docyfy video punch-in 4k` | A 4K video of one task |
@@ -166,6 +167,12 @@ Or ask Claude to update the guide. It compares saved page fingerprints, finds th
 ### Memory for the next agent
 
 Every script that finishes updates `docyfy.md` in the workspace. It holds the app, the outputs and when each was built, every task with its numbered steps, a version for each task, and a dated change log. When a step changes, the task goes up a version and the log says so. A new agent reads the top of the file and knows where things stand. Add your own notes with `progress.py note --ws W --text "Client wants Hindi on all videos"`. `journal.json` holds the full history.
+
+## Plan what to write first
+
+`plan.py --ws W --url APP` reads the menu, visits each page, and turns the main buttons into tasks like "Apply for leave (Leave)". Each gets a score from 0 to 100 and a tier, first, next or later. It writes `plan.md` to the workspace.
+
+Without real numbers the score is a guess from menu order, button names (punch in and apply score high, delete and export low), core areas like attendance and leave, admin areas, and how many fields a form has. If you have support tickets or analytics, pass `--usage usage.csv` with two columns, task and count. Tasks that match a row use the count instead, and the rest drop below them.
 
 ## Your own Chrome
 
