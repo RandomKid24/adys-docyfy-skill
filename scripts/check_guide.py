@@ -132,6 +132,15 @@ def main():
                 warn(where, f"{len(steps)} steps; readers lose their place past about 12, so split it")
             if (feat.get("fields") or len(steps) >= 4) and not feat.get("before"):
                 warn(where, "no `before` box (where it is in the menu, who can do it, what to have ready); forms and long tasks need one")
+            if steps:
+                last = re.sub(r"[*_`]", "", str(steps[-1].get("text", ""))).lower()
+                if re.search(r"\b(next|continue|proceed)\b", last) and not re.search(r"saved|submitted|success|confirm|created|appears|you (will )?see|done", last):
+                    warn(where, "the last step is a Next or Continue click. Finish every section and end on the final Save or Submit and the confirmation the reader sees")
+                elif len(steps) >= 3 and not re.search(r"saved|submitted|success|confirm|created|added|appears|you (will )?see|done|message|opens|shows|lists", last):
+                    warn(where, "the last step does not say what the reader sees when it worked (a message, a new row, a new page)")
+            for f_ in feat.get("fields", []):
+                if "required" not in f_:
+                    warn(where, f"field '{f_.get('name', '')}' does not say required or optional; readers need to know which they can skip")
             for key in ("video", "gif"):
                 if feat.get(key) and not os.path.exists(os.path.join(a.ws, feat[key])):
                     warn(where, f"{key} {feat[key]} not found; the HTML page will skip it")

@@ -1,6 +1,6 @@
 ---
 name: docyfy
-description: Builds click-by-click user guides for web apps, whole app, modules or single tasks like "how to punch in". Outputs PDF, Word, help site, cheat sheets, and 4K narrated screen recordings. Use for any request for a user guide, manual, help docs, how-to, training or onboarding material, or "where to click" docs for a web app, ERP, CRM or HRMS. Words after the command pick the output (pdf, video, word, site, all).
+description: Builds click-by-click user guides for web apps, whole app, modules or single tasks like "how to punch in". Outputs PDF, Word, help site, cheat sheets, and silent 4K screen recordings. Use for any request for a user guide, manual, help docs, how-to, training or onboarding material, or "where to click" docs for a web app, ERP, CRM or HRMS. Words after the command pick the output (pdf, video, word, site, all).
 ---
 
 # Docyfy
@@ -11,7 +11,7 @@ Make guides that tell a non-technical reader exactly where to click. Scripts do 
 Scripts are in `scripts/` next to this file. Python is the single line in the `.python` file here if it exists, else `python3`. Run `<python> <skill-dir>/scripts/<name>.py`. If a package is missing and there is no `.python`, run `python3 -m venv ~/.docyfy/venv`, `~/.docyfy/venv/bin/pip install -r <skill-dir>/requirements.txt`, and write that interpreter path into `.python`. Never use `--break-system-packages`.
 
 ## Words after /docyfy
-`pdf` PDF and cheat sheets (capture with `--no-video`). `video` MP4 recordings only (skip `build_pdf.py`). `gif` also makes a GIF per task, which is never made otherwise. `word` add `build_docx.py`. `site` add `build_site.py`. `all` everything. `draft|1080p|4k|8k` video quality, default 4k. `voice` narrated MP4. `hi`, `mr`, `en` set the languages (Hindi, Marathi, English), one video each. Words combine. A task or module name sets the scope. If words cover it, skip those intake questions. State what you will make in one line, then start.
+`pdf` PDF and cheat sheets (capture with `--no-video`). `video` MP4 recordings only (skip `build_pdf.py`). `gif` also makes a GIF per task, which is never made otherwise. `word` add `build_docx.py`. `site` add `build_site.py`. `all` everything. `draft|1080p|4k|8k` video quality, default 4k. `hi`, `mr`, `en` set the languages (Hindi, Marathi, English), one video each. Words combine. A task or module name sets the scope. If words cover it, skip those intake questions. State what you will make in one line, then start.
 
 ## Step 0. Resume
 If a workspace exists (`guide-workspace/*/state.json`), run `progress.py status --ws W` and continue at the first unfinished module. Read the top of `W/docyfy.md` first (summary, outputs, notes, change log). Read its Tasks section only for the module you are on. Never re-ask what `state.json` answers. App changed after a release: `references/update.md`.
@@ -36,6 +36,13 @@ Read `references/finish.md` (quick start, workflows, cheat sheets, check, build,
 
 ## Writing steps
 Read `references/readers.md` once before writing text. In short: one action per numbered mark, name the label exactly as shown, say where it is ("top right"), whole screen by default, at most one `tip` and one `warning` per step, no "simply" or "just". Module file format: `references/module-json.md`. Look and colours: `references/look.md`.
+
+## Cover the whole task
+Never skip. Run `capture.py fields --url PAGE` first. It lists every field on the page, including ones below the fold, each marked REQUIRED or optional, plus the tabs or sections. For a multi-section form or a wizard, rerun with `--click` on each tab. Then:
+- Walk every section in order and end on the final Save or Submit and the confirmation the reader sees. A task that ends on "Next" is unfinished.
+- Put every field in the `fields` table with `required` true or false, and say in the step text which boxes can be left empty.
+- Long pages get several steps that scroll down. Do not drop fields to keep it short.
+- Ring the clickable thing itself (the avatar, the button), not the row around it.
 
 ## Traps
 Boxes are CSS pixels and `viewport` in the module JSON must match the window used. Do not resize mid-module. Sticky headers and modals hide targets, so scroll into view first. Empty tables: document the empty state honestly, never invent records.

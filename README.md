@@ -1,6 +1,6 @@
 # Docyfy
 
-A Claude skill that writes click-by-click user guides for web apps. It opens your app, takes sharp screenshots, rings each click target with a numbered highlight, and builds the guide. It can also record each task as a 4K video with a gliding cursor and an optional voice.
+A Claude skill that writes click-by-click user guides for web apps. It opens your app, takes sharp screenshots, rings each click target with a numbered highlight, and builds the guide. It can also record each task as a 4K video with a gliding cursor, captions and no audio.
 
 You can get any of these:
 
@@ -88,7 +88,7 @@ Type `/docyfy` and add words to pick the output.
 | `/docyfy word` | Word file |
 | `/docyfy site` | Help site |
 | `/docyfy all` | Everything above |
-| `/docyfy video punch-in 4k voice` | A narrated 4K video of one task |
+| `/docyfy video punch-in 4k` | A 4K video of one task |
 
 Words combine (`/docyfy pdf video`). Add `draft`, `1080p`, `4k` or `8k` to set video quality. Or just describe it in plain language:
 
@@ -121,7 +121,6 @@ Set options in the capture spec header:
 | Key | Default | What it does |
 | --- | --- | --- |
 | `quality` | `4k` | `4k` (3840x2160, 60 fps), `1080p`, `draft` (1080p, 30 fps, renders in seconds), `8k` |
-| `voice` | off | `true` or `{"name": "Rishi", "rate": 170}`. Reads each step aloud. MP4 only |
 | `zoom`, `zoom_level` | on, 1.3 | Zoom toward click targets |
 | `cards` | on | Title and end cards |
 | `highlight` | `auto` | `auto` shows the caption on click steps and a soft ring on look-only steps. `full` rings every mark. `caption` shows captions only |
@@ -129,11 +128,10 @@ Set options in the capture spec header:
 
 Use `draft` while checking and `4k` for the final pass. 4K takes a few minutes per task on a laptop and is much faster on a Mac with ffmpeg's VideoToolbox encoder.
 
-### Hindi, Marathi and English
+### Hindi, Marathi and English (captions only)
 
 Add `"langs": ["en", "hi", "mr"]` to the spec, or say `hi` or `mr` after the command. One video is rendered per language from the same captured stills, so extra languages only cost render time. Captions, step chips, title and end cards all switch language. Claude writes the Hindi and Marathi step text for you.
 
-Voice tries these in order: your own command (`DOCYFY_TTS_CMD`), Microsoft neural voices through `edge-tts` (best Hindi and Marathi, needs internet, no key), macOS `say`, then espeak-ng. Voices can be changed per language in the spec (see `references/video.md`). To hear them before you render a video, run `<python> scripts/capture.py voices` and play the three files it writes.
 
 ### Dropdowns
 
@@ -165,6 +163,10 @@ When your app changes, ask Claude to update the guide. It compares saved page fi
 
 Every script that finishes updates `docyfy.md` in the workspace. It holds the app, the outputs and when each was built, every task with its numbered steps, a version for each task, and a dated change log. When a step changes, the task goes up a version and the log says so. A new agent reads the top of the file and knows where things stand. Add your own notes with `progress.py note --ws W --text "Client wants Hindi on all videos"`. `journal.json` holds the full history.
 
+## Finding every field
+
+`capture.py fields --url PAGE` prints every field on the page, whole page, marked REQUIRED or optional, with the tabs and the buttons at the bottom. Add `--json out.json` to get a starting `fields` table for the guide. The checker warns when a task ends on Next, never says what the reader sees at the end, or leaves a field without required or optional.
+
 ## Linking help from your app
 
 The site build writes `help-map.json`, which maps a `help_key` to a page URL. Point your app's Help button at the key for the current screen.
@@ -192,8 +194,6 @@ The skill is token optimized. `SKILL.md` stays small, each step loads its own re
 ## Known limits
 
 - Tested end to end on a demo app and sample data. Run it on one real task first and check that the highlights line up with your screens.
-- The voice has only been tested with a stand-in tone, not the real macOS `say` or Microsoft voices. Hindi and Marathi text and captions are tested.
-- Voice is optional and off by default. For good Hindi or Marathi audio, run `pip install edge-tts` in `~/.docyfy/venv`. It is not installed with the skill.
 - The bundled font lacks the rupee sign in its main set. PDFs handle it. Images show "Rs".
 - Apps behind single sign-on or captcha need the slower browser-tool capture.
 

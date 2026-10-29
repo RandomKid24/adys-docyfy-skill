@@ -57,6 +57,10 @@ class Timeline:
         self.n += 1
         path = os.path.join(self.tmp, f"still{self.n}.png")
         page.screenshot(path=path)
+        try:
+            self.scroll = page.evaluate("[Math.round(scrollX), Math.round(scrollY)]")
+        except Exception:
+            self.scroll = None
         self.stills.append([round(t, 3), path, fade if self.stills else 0.0])
 
     # ---- rendering -------------------------------------------------------------------------------------------

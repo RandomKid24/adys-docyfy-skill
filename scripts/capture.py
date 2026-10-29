@@ -4,7 +4,7 @@ boxes are measured exactly, and the video is edited as it records. No per-click 
 
   capture.py login   --url URL --out ws/.auth/state.json     you sign in yourself, in a real window
   capture.py explore --url URL [--state S] [--wait CSS]       list clickable things as text (no images)
-  capture.py voices  [--out DIR] [--langs en,hi,mr]          hear the narration voices before you render
+  capture.py fields  --url URL [--state S] [--click CSS ...] [--json out.json]   every field on a page with required or optional
   capture.py run     --ws W --spec spec.json [--no-video]     do the tasks, write shots, boxes, GIFs
 
 Spec (spec.json):
@@ -72,12 +72,12 @@ FIT_JS = """(el) => {
   const vw = innerWidth, R = e => e.getBoundingClientRect();
   const vis = e => { const r = R(e), c = getComputedStyle(e); return r.width > 4 && r.height > 4 && c.visibility !== 'hidden' && c.display !== 'none' && +c.opacity > 0.05; };
   const tag = el.tagName.toLowerCase();
-  const own = ['button', 'a', 'input', 'select', 'textarea', 'img', 'svg', 'label'].includes(tag) || el.getAttribute('role') === 'button';
   const r0 = R(el);
+  const own = ['button', 'a', 'input', 'select', 'textarea', 'img', 'svg'].includes(tag) || el.getAttribute('role') === 'button' || (tag === 'label' && r0.width < vw * 0.3);
   let pick = el;
   if (!own) {
-    const hit = [...el.querySelectorAll('button,a[href],[role=button],input:not([type=hidden]),select,textarea,label,[onclick],[tabindex]:not([tabindex="-1"])')]
-      .concat([...el.querySelectorAll('*')].filter(e => getComputedStyle(e).cursor === 'pointer')).filter(vis);
+    const hit = [...el.querySelectorAll('button,a[href],[role=button],input:not([type=hidden]),select,textarea,label,[onclick],[tabindex]:not([tabindex="-1"]),[class*=avatar i],[class*=upload i],[class*=dropzone i]')]
+      .concat([...el.querySelectorAll('*')].filter(e => getComputedStyle(e).cursor === 'pointer' && getComputedStyle(e.parentElement).cursor !== 'pointer')).filter(vis);
     // one clear clickable thing inside a big container: ring that thing, not the whole row
     const small = hit.filter(e => R(e).width < r0.width * 0.7 || R(e).height < r0.height * 0.7);
     if (small.length === 1 || (small.length > 1 && small.every(e => small[0].contains(e) || e.contains(small[0])))) {
@@ -91,7 +91,7 @@ FIT_JS = """(el) => {
         const g = document.createRange(); g.selectNodeContents(n);
         for (const q of g.getClientRects()) { x0 = Math.min(x0, q.left); y0 = Math.min(y0, q.top); x1 = Math.max(x1, q.right); y1 = Math.max(y1, q.bottom); }
       }
-      el.querySelectorAll('img,svg,canvas,input,button,select').forEach(e => { if (vis(e)) { const q = R(e); x0 = Math.min(x0, q.left); y0 = Math.min(y0, q.top); x1 = Math.max(x1, q.right); y1 = Math.max(y1, q.bottom); } });
+      el.querySelectorAll('img,svg,canvas,input,button,select,[class*=avatar i]').forEach(e => { if (vis(e)) { const q = R(e); x0 = Math.min(x0, q.left); y0 = Math.min(y0, q.top); x1 = Math.max(x1, q.right); y1 = Math.max(y1, q.bottom); } });
       if (x1 > x0 && (x1 - x0) < r0.width * 0.8) return [x0, y0, x1 - x0, y1 - y0];
     }
   }
@@ -265,6 +265,62 @@ def cmd_login(a):
             pass
     os.chmod(a.out, 0o600)
     print(f"Saved sign-in to {a.out}. Keep it private. It is never copied into the guide.")
+
+
+FIELDS_JS = """() => {
+  const vis = e => { const s = getComputedStyle(e); const r = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && (r.width > 2 || e.type === 'checkbox' || e.type === 'radio'); };
+  const txt = e => (e && e.innerText || '').replace(/\\s+/g, ' ').trim();
+  const out = [];
+  document.querySelectorAll('input,select,textarea,[role=combobox],[role=switch],[contenteditable=true]').forEach(e => {
+    if (['hidden', 'submit', 'button', 'reset'].includes(e.type) || !vis(e)) return;
+    let lab = (e.id && txt(document.querySelector(`label[for="${CSS.escape(e.id)}"]`))) || txt(e.closest('label')) || e.getAttribute('aria-label') || '';
+    if (!lab) { let p = e.parentElement; for (let k = 0; k < 4 && p && !lab; k++, p = p.parentElement) { const l = p.querySelector('label,legend'); if (l && !l.contains(e)) lab = txt(l); } }
+    let sec = ''; let h = e;
+    for (let k = 0; k < 12 && h && !sec; k++) { h = h.previousElementSibling || h.parentElement; if (h && /^H[1-4]$/.test(h.tagName)) sec = txt(h); else if (h && h.querySelector) { const q = [...h.querySelectorAll('h1,h2,h3,h4')].pop(); if (q && !q.contains(e)) sec = txt(q); } }
+    const help = txt(e.closest('div')?.querySelector('small,.help,.hint,[class*=helper i],[class*=hint i],[class*=description i]'));
+    const star = /\\*\\s*$/.test(lab) || /required/i.test(e.className || '');
+    out.push({section: sec, label: lab.replace(/\\s*\\*\\s*$/, ''), type: e.tagName === 'SELECT' ? 'select' : (e.type || e.tagName.toLowerCase()),
+      required: !!(e.required || e.getAttribute('aria-required') === 'true' || star), placeholder: e.placeholder || '', help: help && help.length < 160 ? help : '',
+      options: e.tagName === 'SELECT' ? [...e.options].slice(0, 12).map(o => o.text.trim()).filter(Boolean) : undefined,
+      readonly: e.readOnly || e.disabled || undefined, onscreen: (() => { const r = e.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()});
+  });
+  const btns = [...document.querySelectorAll('button,[type=submit],a[role=button]')].filter(vis).map(b => txt(b) || b.value).filter(Boolean).slice(-12);
+  const tabs = [...document.querySelectorAll('[role=tab],.tab,[class*=step i] button,[class*=stepper i] li')].filter(vis).map(txt).filter(Boolean).slice(0, 14);
+  return {fields: out, buttons: btns, tabs};
+}"""
+
+
+def cmd_fields(a):
+    """List every field on a page, whole page, not just what is on screen. Output is text, or a fields array for the module JSON."""
+    sp = pw()()
+    with sp as p:
+        br = launch(p)
+        ctx = br.new_context(storage_state=a.state if a.state and os.path.exists(a.state) else None, viewport={"width": 1440, "height": 900})
+        page = ctx.new_page()
+        page.goto(a.url, wait_until="networkidle")
+        for c in (a.click or []):          # open a tab or section first, then list again
+            page.locator(c).first.click(timeout=6000)
+            page.wait_for_timeout(400)
+        d = page.evaluate(FIELDS_JS)
+        head = f"# {page.title()}  {page.url}"
+        br.close()
+    if a.json:
+        rows = [{"name": f["label"] or f["placeholder"], "required": f["required"],
+                 **({"help": f["help"]} if f["help"] else {}), **({"example": "One of: " + ", ".join(f["options"][:6])} if f.get("options") else {})}
+                for f in d["fields"] if (f["label"] or f["placeholder"]) and not f.get("readonly")]
+        json.dump(rows, open(a.json, "w"), indent=1, ensure_ascii=False)
+        print(f"wrote {len(rows)} fields to {a.json}. Add `help` and `example` for each, then paste under the feature's fields.")
+    print(head)
+    if d["tabs"]:
+        print("sections or tabs on this page: " + " | ".join(d["tabs"]) + "   (run again with --click on each)")
+    sec = None
+    for f in d["fields"]:
+        if f["section"] != sec:
+            sec = f["section"]
+            print(f"\n## {sec or '(no heading)'}")
+        extra = (" [" + ", ".join(f["options"][:6]) + "]" if f.get("options") else "") + (" (read only)" if f.get("readonly") else "") + ("" if f["onscreen"] else " (below the fold)")
+        print(f'{"REQUIRED" if f["required"] else "optional"}  {f["label"] or "(no label)"}  <{f["type"]}>{extra}' + (f"  hint: {f['help']}" if f["help"] else ""))
+    print("\nbuttons: " + " | ".join(d["buttons"]))
 
 
 def cmd_explore(a):
@@ -650,7 +706,7 @@ def run_task(p, spec, ws, task, video, accent):
     page = ctx.new_page()
     steps_out = []
     cur = [vw * 0.5, vh * 0.62]     # where the on-screen cursor is
-    voice = spec.get("voice")
+    voice = None      # narration was removed on purpose: videos are silent
     vname = voice.get("name") if isinstance(voice, dict) else None
     vrate = int(voice.get("rate", 170)) if isinstance(voice, dict) else 170
     vnames = {"en": vname, **((voice.get("voices") or {}) if isinstance(voice, dict) else {})}
@@ -713,6 +769,14 @@ def run_task(p, spec, ws, task, video, accent):
         if S:
             if not S.stills:
                 S.snap(page, 0.0)
+            else:
+                try:   # measuring a target scrolls it into view; the video must show that scrolled page
+                    now_ = page.evaluate("[Math.round(scrollX), Math.round(scrollY)]")
+                    if now_ != getattr(S, "scroll", None):
+                        S.snap(page, S.t, fade=0.3)
+                        S.t += 0.35
+                except Exception:
+                    pass
             tgt = None
             if action in ("click", "fill", "select"):
                 tgt = st[action][0] if isinstance(st[action], list) else st[action]
@@ -931,7 +995,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("login"); s.add_argument("--url", required=True); s.add_argument("--out", required=True); s.set_defaults(f=cmd_login)
     s = sub.add_parser("explore"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--wait"); s.set_defaults(f=cmd_explore)
-    s = sub.add_parser("voices"); s.add_argument("--out", default="voice-samples"); s.add_argument("--langs", default="en,hi,mr"); s.set_defaults(f=cmd_voices)
+    s = sub.add_parser("fields"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--click", action="append"); s.add_argument("--json"); s.set_defaults(f=cmd_fields)
     s = sub.add_parser("run"); s.add_argument("--ws", required=True); s.add_argument("--spec", required=True)
     s.add_argument("--no-video", action="store_true"); s.add_argument("--only"); s.set_defaults(f=cmd_run)
     a = ap.parse_args()
