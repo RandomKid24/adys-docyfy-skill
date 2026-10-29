@@ -50,3 +50,7 @@
 - `problems` (module level, optional): `[{"message": "Phone number must be 10 digits", "cause": "...", "fix": "..."}]`. Becomes a "Common problems" table at the end of the module, listed in the contents. Use only messages you actually saw on screen; never invent them.
 - `common`: pulls a step from the project's `common.json` (seeded from `assets/common.json`), including its shared screenshot if one is registered.
 
+
+
+## Box fitting
+Capture measures each target and fits it. If the target is a plain container with one clear clickable child (an avatar in a row), the ring goes on that child. A wide plain block shrinks to the text and images inside it. Add `"exact": true` to a mark to ring the element as measured. Prefer a precise selector anyway.

@@ -89,6 +89,8 @@ def main():
                     warn(k, f"mark {m.get('n', i + 1)} is tiny ({w}x{h}); did the measurement catch the right element?")
                 if w * h > 0.5 * vp[0] * vp[1]:
                     warn(k, f"mark {m.get('n', i + 1)} covers over half the screen; a highlight this big points at nothing")
+                if w > 0.45 * vp[0] and h < 0.2 * w and m.get("style") != "blur":
+                    warn(k, f"mark {m.get('n', i + 1)} is a wide strip ({w}x{h}); it may ring a whole row. Point the target at the clickable child (the avatar, the button)")
                 if m.get("style") != "blur":
                     x0, y0 = max(0, int(x * sx)), max(0, int(y * sy))
                     x1, y1 = min(im.width, int((x + w) * sx)), min(im.height, int((y + h) * sy))

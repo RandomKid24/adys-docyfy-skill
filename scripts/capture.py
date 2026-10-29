@@ -68,13 +68,54 @@ def launch(p, headless=True):
             die("No browser found. Install Google Chrome, or run: python -m playwright install chromium\n" + str(e)[:200])
 
 
-def box_of(page, target):
+FIT_JS = """(el) => {
+  const vw = innerWidth, R = e => e.getBoundingClientRect();
+  const vis = e => { const r = R(e), c = getComputedStyle(e); return r.width > 4 && r.height > 4 && c.visibility !== 'hidden' && c.display !== 'none' && +c.opacity > 0.05; };
+  const tag = el.tagName.toLowerCase();
+  const own = ['button', 'a', 'input', 'select', 'textarea', 'img', 'svg', 'label'].includes(tag) || el.getAttribute('role') === 'button';
+  const r0 = R(el);
+  let pick = el;
+  if (!own) {
+    const hit = [...el.querySelectorAll('button,a[href],[role=button],input:not([type=hidden]),select,textarea,label,[onclick],[tabindex]:not([tabindex="-1"])')]
+      .concat([...el.querySelectorAll('*')].filter(e => getComputedStyle(e).cursor === 'pointer')).filter(vis);
+    // one clear clickable thing inside a big container: ring that thing, not the whole row
+    const small = hit.filter(e => R(e).width < r0.width * 0.7 || R(e).height < r0.height * 0.7);
+    if (small.length === 1 || (small.length > 1 && small.every(e => small[0].contains(e) || e.contains(small[0])))) {
+      pick = small.reduce((a, b) => (R(a).width * R(a).height >= R(b).width * R(b).height ? a : b));
+    } else if (r0.width > vw * 0.5) {
+      // wide plain block: hug what is painted inside it
+      let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let n; (n = w.nextNode());) {
+        if (!n.textContent.trim() || !n.parentElement || !vis(n.parentElement)) continue;
+        const g = document.createRange(); g.selectNodeContents(n);
+        for (const q of g.getClientRects()) { x0 = Math.min(x0, q.left); y0 = Math.min(y0, q.top); x1 = Math.max(x1, q.right); y1 = Math.max(y1, q.bottom); }
+      }
+      el.querySelectorAll('img,svg,canvas,input,button,select').forEach(e => { if (vis(e)) { const q = R(e); x0 = Math.min(x0, q.left); y0 = Math.min(y0, q.top); x1 = Math.max(x1, q.right); y1 = Math.max(y1, q.bottom); } });
+      if (x1 > x0 && (x1 - x0) < r0.width * 0.8) return [x0, y0, x1 - x0, y1 - y0];
+    }
+  }
+  const r = R(pick);
+  return [r.left, r.top, r.width, r.height];
+}"""
+
+
+def box_of(page, target, fit=True):
+    """Measure a target. A plain container that holds one clear clickable child gets the child's box,
+    and a wide plain block shrinks to what is painted in it. Add "exact": true to a mark to skip this."""
     loc = page.locator(target).first
     loc.wait_for(state="visible", timeout=8000)
     loc.scroll_into_view_if_needed(timeout=3000)
     b = loc.bounding_box()
     if not b:
         raise RuntimeError(f"no box for {target}")
+    if fit:
+        try:
+            x, y, w, h = loc.evaluate(FIT_JS)
+            if w > 4 and h > 4:
+                return [round(x), round(y), round(w), round(h)]
+        except Exception:
+            pass
     return [round(b["x"]), round(b["y"]), round(b["width"]), round(b["height"])]
 
 
@@ -634,7 +675,7 @@ def run_task(p, spec, ws, task, video, accent):
         want_shot = bool(marks_in) or st.get("shot") or st.get("blur")
         if want_shot:
             for m in marks_in:
-                boxes.append(box_of(page, m["target"]))
+                boxes.append(box_of(page, m["target"], not m.get("exact")))
             blur_boxes = [box_of(page, t) for t in st.get("blur", [])]
             png = os.path.join(shots, f"{slug}-{i}.png")
             dd = dd_open(page, st["select"][0], st["select"][1], accent, True) if action == "select" and isinstance(st["select"], list) else None
