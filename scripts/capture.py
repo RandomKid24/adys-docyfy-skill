@@ -373,6 +373,9 @@ DRAFT_JS = r"""() => {
 }"""
 
 
+SENSITIVE = re.compile(r"cc-|one-time-code|passw|passcode|\bcvv\b|\bcvc\b|\botp\b|\bpin\b|card ?n|aadhaar|aadhar|\bssn\b|iban|account ?n|\bifsc\b|secret|api.?key|token")
+
+
 def sample_for(f):
     """Pick a value the field itself will accept. Its own attributes decide, not its label."""
     t = f["type"]
@@ -426,6 +429,10 @@ def fill_valid(page, f, val):
 
 def cmd_draft(a):
     """Write a first spec that walks every field, every Next and the final Save in order. It reads the live page, not a word list."""
+    env_ = a.env or infer_env(a.url)
+    if env_ == "production":
+        die("This address does not look like a test site, and draft types into forms. Use a local or staging copy, "
+            "or pass --env staging if you are sure this is safe to type into.")
     sp = pw()()
     notes = []
     with sp as p:
@@ -453,8 +460,9 @@ def cmd_draft(a):
                 if f["sel"] in done_sel:
                     continue
                 done_sel.add(f["sel"])
-                if f["type"] == "password":
+                if f["type"] == "password" or SENSITIVE.search(f"{f['label']} {f['placeholder']} {f.get('auto', '')} {f['sel']}".lower()):
                     steps.append({"text": f"Type your **{f['label']}**. Do it yourself, this guide never types it.", "look": True, "marks": [{"target": f["sel"]}]})
+                    notes.append(f"'{f['label']}' looks like a password, card, OTP or ID number, so it is look-only. Never put a real one in a guide.")
                     continue
                 if f["type"] == "file":
                     steps.append({"text": f"Click **{f['label']}** and choose a file from your computer.", "look": True, "marks": [{"target": f["sel"]}]})
@@ -506,7 +514,7 @@ def cmd_draft(a):
     steps.append(last)
     if steps and "goto" not in steps[0]:
         steps[0]["goto"] = path
-    spec = {"env": "staging", "base": origin, "viewport": [1440, 900], "quality": "draft",
+    spec = {"env": env_, "base": origin, "viewport": [1440, 900], "quality": "draft",
             "tasks": [{"slug": re.sub(r"[^a-z0-9]+", "-", a.title.lower()).strip("-") or "task", "title": a.title, "goal": "", "before": {"menu": "", "role": "", "ready": []},
                        "fields": fields, "steps": steps}]}
     json.dump(spec, open(a.out, "w"), indent=1, ensure_ascii=False)
@@ -910,6 +918,16 @@ def make_gif(mp4, out_gif):
     return out_gif if os.path.exists(out_gif) else None
 
 
+def infer_env(url):
+    """local, staging or production, from the address alone. Anything that does not look like a test site counts as production."""
+    host = re.sub(r"^https?://", "", url or "").split("/")[0].split(":")[0].lower()
+    if host in ("localhost", "127.0.0.1", "[::1]", "::1") or host.endswith((".localhost", ".test", ".local")):
+        return "local"
+    if re.search(r"(^|[.-])(staging|stage|stg|dev|test|qa|uat|sandbox|preview|demo)([.-]|$)", host):
+        return "staging"
+    return "production"
+
+
 def check_steps(task, env):
     """On local and staging every step with a highlight must also do something, in order. Boxes with no action are not a guide."""
     if env == "production":
@@ -934,7 +952,9 @@ def check_steps(task, env):
 
 
 def run_task(p, spec, ws, task, video, accent):
-    env = spec.get("env", "staging")
+    env = spec.get("env") or infer_env(spec.get("base", ""))
+    if env != "production" and infer_env(spec.get("base", "")) == "production":
+        print(f"  warning: env is {env!r} but {spec.get('base')} does not look like a test site. Clicks and typing will really happen there.", file=sys.stderr)
     base = spec.get("base", "").rstrip("/")
     slug = task["slug"]
     shots = os.path.join(ws, "shots")
@@ -1326,7 +1346,7 @@ def main():
     s = sub.add_parser("update"); s.add_argument("--ws", required=True); s.add_argument("--no-video", action="store_true"); s.add_argument("--threshold", type=float, default=0.01); s.set_defaults(f=cmd_update)
     s = sub.add_parser("chrome"); s.add_argument("--url", default=""); s.set_defaults(f=cmd_chrome)
     s = sub.add_parser("draft"); s.add_argument("--url", required=True); s.add_argument("--title", required=True); s.add_argument("--out", default="spec.json")
-    s.add_argument("--state"); s.add_argument("--pre", action="append"); s.add_argument("--confirm", default=""); s.add_argument("--advance", default=""); s.add_argument("--finish", default=""); s.set_defaults(f=cmd_draft)
+    s.add_argument("--state"); s.add_argument("--pre", action="append"); s.add_argument("--confirm", default=""); s.add_argument("--advance", default=""); s.add_argument("--finish", default=""); s.add_argument("--env", choices=["local", "staging"]); s.set_defaults(f=cmd_draft)
     s = sub.add_parser("fields"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--click", action="append"); s.add_argument("--json"); s.set_defaults(f=cmd_fields)
     s = sub.add_parser("run"); s.add_argument("--ws", required=True); s.add_argument("--spec", required=True)
     s.add_argument("--no-video", action="store_true"); s.add_argument("--only"); s.set_defaults(f=cmd_run)

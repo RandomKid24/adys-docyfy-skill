@@ -64,6 +64,10 @@ def cmd_init(a):
           "audience": a.audience, "modules": {}, "order": [], "shots": {},
           "brand": {"accent": a.accent, "logo": a.logo, "style": a.style or "spotlight", "site_url": a.site_url.rstrip("/")}}
     save(a.ws, st)
+    try:   # keep sign-in files and scratch work out of git
+        open(os.path.join(a.ws, ".gitignore"), "a").write(".auth/\nbuild/\n.update-old/\n")
+    except OSError:
+        pass
     print(f"initialised {a.ws}")
     _jlog(a.ws, f"Started guide for {a.app}", base=a.url or None)
 
