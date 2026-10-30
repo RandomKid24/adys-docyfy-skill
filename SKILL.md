@@ -25,8 +25,14 @@ If a workspace exists (`guide-workspace/*/state.json`), run `progress.py status 
 
 Then `progress.py init --ws W --app NAME --url URL [--accent "#RRGGBB"] [--logo path] [--gifs]`. On local or staging, create, edit and delete test records freely with obvious sample data. On production, stop before the final confirm click.
 
-## Step 2. Map (cheap)
-`capture.py explore --url URL` prints clickable items as text. Read menu links from it, no pictures. Add each with `progress.py add-module`, in menu order. Sub-pages are features. For a whole app, show the module list in one line and carry on.
+## Step 2. Plan (whole app: always, never skip)
+Run `plan.py --ws W --url URL --register`. It reads the menu, ranks the tasks, and adds each menu page as a module. For a whole app, show the plan in a few lines (modules in order, the top tasks, anything it could not open) and ask with AskUserQuestion: build in this order, start with the top tasks first, drop some modules, or add tasks it missed. Offer a `usage.csv` of support tickets or analytics once. Save the answer with `progress.py note`. Pages behind a click (tabs, sub-pages) are tasks inside a module. For chosen tasks only, skip the plan and go to Step 3.
+
+## Go one module at a time
+Do the first module fully (capture, check, build). Show what came out in two lines and ask once: keep this style for the rest, or change something. After that, continue module by module without stopping, with one short line per module. Say `next module` only if the person asked to approve each one. Sort out each module before the next, never half-do many.
+
+## When you are unsure, ask
+Use AskUserQuestion (one call, up to 4 questions, with a default marked) instead of guessing when: a sign-in or role decides what is visible; a form's required data is unclear (an ID that must exist, a value that must be unique); `draft` prints a `check:` line; a button could be Save or Cancel; a step would delete, send or pay; a page is empty and you would need real records; two modules overlap; or a task ran in a different order than expected. If nobody can answer (a scheduled run), take the safest reading, say what you chose at the top of the work, and record it with `progress.py note`.
 
 ## Step 3. Capture, one module at a time
 Default: `references/fast-capture.md` (Playwright on this machine, needs no per-click round trips). If the app is not reachable from here (SSO, captcha, private network, no Playwright): `references/browser-capture.md`, then `references/capture.md`.

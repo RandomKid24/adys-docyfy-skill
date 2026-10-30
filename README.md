@@ -168,6 +168,10 @@ Or ask Claude to update the guide. It compares saved page fingerprints, finds th
 
 Every script that finishes updates `docyfy.md` in the workspace. It holds the app, the outputs and when each was built, every task with its numbered steps, a version for each task, and a dated change log. When a step changes, the task goes up a version and the log says so. A new agent reads the top of the file and knows where things stand. Add your own notes with `progress.py note --ws W --text "Client wants Hindi on all videos"`. `journal.json` holds the full history.
 
+## Whole app, step by step
+
+For a whole app Claude plans first. It reads the menu, ranks the tasks, adds each menu page as a module, and shows you the plan. You can reorder, drop modules or add tasks. Then it builds one module fully, asks once whether the style is right, and carries on module by module. When it is unsure (a sign-in decides what you see, a form needs data that must exist, a button could be Save or Cancel, a step would delete or send something) it asks you instead of guessing. In a scheduled run it picks the safest option and writes the choice into `docyfy.md`.
+
 ## Plan what to write first
 
 `plan.py --ws W --url APP` reads the menu, visits each page, and turns the main buttons into tasks like "Apply for leave (Leave)". Each gets a score from 0 to 100 and a tier, first, next or later. It writes `plan.md` to the workspace.
