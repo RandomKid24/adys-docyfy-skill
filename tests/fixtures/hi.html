@@ -1,0 +1,6 @@
+<style>.p{background:#0a7;color:#fff;border:0;padding:8px 16px}.s{background:#fff;border:1px solid #999;padding:8px 16px}</style>
+<body><div id=a><form><label for=n>कर्मचारी का नाम</label><input id=n required><label for=m>मोबाइल</label><input id=m required pattern="[0-9]{10}" maxlength=10>
+<label for=c>कंपनी कोड</label><input id=c placeholder="जैसे AB-1234" pattern="[A-Z]{2}-[0-9]{4}">
+<label for=l>Role</label><select id=l required><option value="">--</option><option>Manager</option></select>
+<div id=h hidden><label for=z>जन्म तिथि</label><input id=z type=date></div>
+<button type=button class=s>पीछे</button><button type=button class=p id=go onclick="h.hidden=0;this.textContent='सहेजें';this.onclick=()=>document.body.insertAdjacentHTML('beforeend','<b>हो गया</b>')">आगे</button></form></div></body>

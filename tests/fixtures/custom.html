@@ -1,0 +1,20 @@
+<!doctype html><meta charset=utf-8><style>
+body{font:16px sans-serif;margin:30px}.f{margin:14px 0}.trig{border:1px solid #888;padding:8px;width:260px;cursor:pointer}.list{border:1px solid #888;width:260px;display:none}
+.list li{padding:6px;list-style:none;cursor:pointer}.list.open{display:block}.primary{background:#1c75bc;color:#fff;border:0;padding:10px 18px}.toast{position:fixed;top:10px;right:10px;background:#0a7;color:#fff;padding:12px}
+#editor{border:1px solid #888;min-height:60px;width:300px;padding:6px}
+</style><body><h1>New employee</h1>
+<div class=f><label id=dl>Department *</label>
+<div class=trig role=combobox aria-haspopup=listbox aria-expanded=false aria-labelledby=dl id=dept tabindex=0>Select department</div>
+<ul class=list role=listbox id=dlist><li role=option>HR</li><li role=option>Finance</li><li role=option aria-disabled=true>--</li></ul></div>
+<div class=f><label for=nm>Employee name *</label><input id=nm required></div>
+<div class=f><label id=bl>Bio</label><div id=editor contenteditable=true role=textbox aria-labelledby=bl></div></div>
+<div class=f><label for=cc>Card number</label><input id=cc autocomplete=cc-number></div>
+<my-field></my-field>
+<button class=primary id=save type=button>Save employee</button> <button type=button>Cancel</button>
+<script>
+const t=document.getElementById('dept'),l=document.getElementById('dlist');
+t.onclick=()=>{l.classList.toggle('open');t.setAttribute('aria-expanded',l.classList.contains('open'))};
+l.querySelectorAll('li').forEach(li=>li.onclick=()=>{if(li.getAttribute('aria-disabled'))return;t.textContent=li.textContent;l.classList.remove('open');t.setAttribute('aria-expanded',false)});
+customElements.define('my-field',class extends HTMLElement{connectedCallback(){const r=this.attachShadow({mode:'open'});r.innerHTML='<label>City *<input name=city required></label>'}});
+document.getElementById('save').onclick=()=>{document.body.insertAdjacentHTML('beforeend','<div class=toast role=status>Employee saved</div>');setTimeout(()=>document.querySelector('.toast').remove(),1500)};
+</script></body>

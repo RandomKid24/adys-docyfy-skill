@@ -125,12 +125,14 @@ def crawl(url, state, max_pages):
         page.goto(url, wait_until="networkidle")
         nav = page.evaluate(NAV_JS)[:max_pages]
         if not nav:
+            print("ASK: no menu links were found. Ask the person for the page addresses or the menu names, or whether a sign-in is needed first.")
             nav = [{"name": "Home", "href": page.url}]
         for pos, n in enumerate(nav):
             try:
                 page.goto(n["href"], wait_until="networkidle", timeout=15000)
                 d = page.evaluate(PAGE_JS)
             except Exception:
+                print(f"ASK: could not open '{n['name']}' ({n['href']}). It may need another role or a click path. Ask the person whether to skip it.")
                 continue
             name = n["name"]
             found = False

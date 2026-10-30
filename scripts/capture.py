@@ -5,10 +5,10 @@ boxes are measured exactly, and the video is edited as it records. No per-click 
   capture.py login   --url URL --out ws/.auth/state.json     you sign in yourself, in a real window
   capture.py explore --url URL [--state S] [--wait CSS]       list clickable things as text (no images)
   capture.py update  --ws W [--no-video]   run the saved specs again, redo only tasks whose screens changed
-  capture.py chrome  [--url URL]    open a Chrome with a saved profile to sign in once; then set DOCYFY_CDP=1 to reuse it
+  capture.py chrome  [--url URL | --stop]    open a Chrome with a saved profile to sign in once; then set DOCYFY_CDP=1 to reuse it
   capture.py draft   --url FORM_URL --title T [--pre BUTTON ...] --out spec.json   a first spec that does every field, Next and Save in order
   capture.py fields  --url URL [--state S] [--click CSS ...] [--json out.json]   every field on a page with required or optional
-  capture.py run     --ws W --spec spec.json [--no-video]     do the tasks, write shots, boxes, GIFs
+  capture.py run     --ws W --spec spec.json [--no-video] [--preview]     do the tasks, write shots, boxes, GIFs
 
 Spec (spec.json):
 { "env": "staging",                      # local | staging | production (production is look-only)
@@ -40,7 +40,7 @@ import argparse, json, math, os, re, shutil, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-WRITE_ACTIONS = ("click", "fill", "select", "press")
+WRITE_ACTIONS = ("click", "fill", "select", "press", "drag")
 
 
 def die(msg):
@@ -77,8 +77,22 @@ def cdp_state(br):
         return None
 
 
+def cmd_chrome_stop():
+    """Close the Chrome opened by `capture.py chrome`, and with it the debug port."""
+    sp = pw()()
+    with sp as p:
+        try:
+            br = p.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
+            br.new_browser_cdp_session().send("Browser.close")
+            print("Chrome closed. The debug port is shut.")
+        except Exception:
+            print("No debug Chrome is open.")
+
+
 def cmd_chrome(a):
     """Start a Chrome with its own saved profile and a debug port. Sign in there once. Capture then reuses it."""
+    if a.stop:
+        return cmd_chrome_stop()
     exe = chrome_path()
     if not exe:
         die("Google Chrome was not found. Install it, then run this again.")
@@ -86,7 +100,8 @@ def cmd_chrome(a):
     subprocess.Popen([exe, f"--remote-debugging-port={CDP_PORT}", f"--user-data-dir={CHROME_PROFILE}", "--no-first-run", a.url or "about:blank"],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f"Chrome is open with a saved profile at {CHROME_PROFILE}. Sign in to your app in that window and leave it open.\n"
-          "Then run capture with the environment variable DOCYFY_CDP=1 (the skill does this when you ask it to use your open Chrome).")
+          "Then run capture with the environment variable DOCYFY_CDP=1 (the skill does this when you ask it to use your open Chrome).\n"
+          "While this window is open, other programs on this computer can control it. When you are done run `capture.py chrome --stop`.")
 
 
 def launch(p, headless=True):
@@ -329,48 +344,81 @@ FIELDS_JS = """() => {
 
 
 DRAFT_JS = r"""() => {
+  const deep = (sel, root = document) => { const out = [...root.querySelectorAll(sel)]; root.querySelectorAll('*').forEach(e => { if (e.shadowRoot) out.push(...deep(sel, e.shadowRoot)); }); return out; };
   const vis = e => { const s = getComputedStyle(e); const r = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && (r.width > 2 || e.type === 'checkbox' || e.type === 'radio'); };
-  const txt = e => (e && (e.innerText || e.value) || '').replace(/\s+/g, ' ').trim();
-  const uniq = s => { try { return document.querySelectorAll(s).length === 1; } catch (x) { return false; } };
-  const path = e => { const parts = []; for (; e && e.nodeType === 1 && e !== document.body; e = e.parentElement) { let i = 1, p = e; while ((p = p.previousElementSibling)) if (p.tagName === e.tagName) i++; parts.unshift(e.tagName.toLowerCase() + ':nth-of-type(' + i + ')'); } return 'body > ' + parts.join(' > '); };
-  const sel = e => { if (e.id && uniq('#' + CSS.escape(e.id))) return '#' + CSS.escape(e.id);
-    const n = e.getAttribute('name'); if (n && uniq(e.tagName.toLowerCase() + '[name="' + n + '"]')) return e.tagName.toLowerCase() + '[name="' + n + '"]';
-    const pl = e.getAttribute('placeholder'); if (pl && uniq(e.tagName.toLowerCase() + '[placeholder="' + pl + '"]')) return e.tagName.toLowerCase() + '[placeholder="' + pl + '"]';
-    return path(e); };
-  const els = [...document.querySelectorAll('input,select,textarea')].filter(e => !['hidden', 'submit', 'button', 'reset', 'image'].includes(e.type) && vis(e) && !e.disabled && !e.readOnly);
-  const fields = els.map(e => {
+  const txt = e => (e && (e.innerText || e.textContent || e.value) || '').replace(/\s+/g, ' ').trim();
+  const path = e => { const parts = []; for (; e && e.nodeType === 1 && e !== document.body; e = e.parentElement || (e.getRootNode() && e.getRootNode().host)) { let i = 1, p = e; while ((p = p.previousElementSibling)) if (p.tagName === e.tagName) i++; parts.unshift(e.tagName.toLowerCase() + ':nth-of-type(' + i + ')'); } return 'body > ' + parts.join(' > '); };
+  const roleOf = e => { const r = e.getAttribute('role'); if (r) return r; const t = e.tagName.toLowerCase(), ty = (e.type || '').toLowerCase();
+    if (t === 'select') return 'combobox'; if (t === 'textarea' || e.isContentEditable) return 'textbox';
+    return ({checkbox: 'checkbox', radio: 'radio', number: 'spinbutton', range: 'slider', button: 'button', submit: 'button'}[ty]) || (t === 'button' ? 'button' : t === 'a' ? 'link' : 'textbox'); };
+  const labelOf = e => {
+    const by = e.getAttribute('aria-labelledby'); if (by) { const t = by.split(/\s+/).map(i => txt((e.getRootNode().getElementById || document.getElementById).call(e.getRootNode().getElementById ? e.getRootNode() : document, i))).join(' ').trim(); if (t) return t.replace(/\s*\*\s*$/, ''); }
     let lab = (e.id && txt(document.querySelector(`label[for="${CSS.escape(e.id)}"]`))) || txt(e.closest('label')) || e.getAttribute('aria-label') || '';
-    if (!lab) { let p = e.parentElement; for (let k = 0; k < 4 && p && !lab; k++, p = p.parentElement) { const l = p.querySelector('label,legend'); if (l && !l.contains(e)) lab = txt(l); } }
-    const cls = (e.className || '') + ' ' + (e.closest('div') ? e.closest('div').className : '');
-    const req = !!(e.required || e.getAttribute('aria-required') === 'true' || /\*\s*$/.test(lab) || /required/i.test(cls));
+    if (!lab) { let p = e.parentElement || (e.getRootNode() && e.getRootNode().host); for (let k = 0; k < 4 && p && !lab; k++, p = p.parentElement) { const l = p.querySelector && p.querySelector('label,legend'); if (l && !l.contains(e)) lab = txt(l); } }
+    return lab.replace(/\s*\*\s*$/, '').replace(/(^|\s)\*(\s|$)/g, ' ').trim(); };
+  const cands = e => { const c = [], tag = e.tagName.toLowerCase(), lab = labelOf(e);
+    if (e.id) c.push('#' + CSS.escape(e.id));
+    for (const k of ['data-testid', 'data-test', 'data-cy', 'data-qa']) if (e.getAttribute(k)) c.push(`[${k}="${e.getAttribute(k)}"]`);
+    if (e.getAttribute('name')) c.push(`${tag}[name="${e.getAttribute('name')}"]`);
+    if (lab) c.push(`role=${roleOf(e)}[name="${lab.replace(/"/g, '\\"')}"]`);
+    if (e.getAttribute('placeholder')) c.push(`${tag}[placeholder="${e.getAttribute('placeholder')}"]`);
+    if (e.getAttribute('aria-label')) c.push(`${tag}[aria-label="${e.getAttribute('aria-label')}"]`);
+    c.push(path(e)); return c; };
+  const hasPopup = e => /listbox|menu|true|tree|grid/.test(e.getAttribute('aria-haspopup') || '') || e.getAttribute('role') === 'combobox';
+  const raw = deep('input,select,textarea,[contenteditable=true],[role=textbox],[role=combobox],[aria-haspopup=listbox],[aria-haspopup=menu]');
+  const seen = new Set();
+  const els = raw.filter(e => { if (seen.has(e) || !vis(e) || e.disabled || e.readOnly) return false; seen.add(e);
+    if (e.tagName === 'INPUT' && ['hidden', 'submit', 'button', 'reset', 'image'].includes(e.type)) return false;
+    if (e.getAttribute('role') === 'textbox' && ['INPUT', 'TEXTAREA'].includes(e.tagName)) return true;
+    if (e.closest('[role=listbox],[role=menu]') && e.getAttribute('role') !== 'combobox') return false; return true; });
+  const fields = els.map(e => {
+    const lab = labelOf(e), cls = (e.className && e.className.baseVal === undefined ? e.className : '') + ' ' + (e.closest('div') ? e.closest('div').className : '');
+    const raw_lab = (e.id && txt(document.querySelector(`label[for="${CSS.escape(e.id)}"]`))) || txt(e.closest('label')) || '';
+    const req = !!(e.required || e.getAttribute('aria-required') === 'true' || /\*\s*$/.test(raw_lab) || /\*/.test(((e.getAttribute('aria-labelledby') || '').split(/\s+/).map(i => txt(document.getElementById(i))).join(' '))) || /required/i.test(cls));
     const g = k => e.getAttribute(k) || '';
-    return {sel: sel(e), label: (lab || e.placeholder || e.name || '').replace(/\s*\*\s*$/, ''), type: e.tagName === 'SELECT' ? 'select' : (e.type || e.tagName.toLowerCase()),
+    const custom = e.tagName !== 'SELECT' && !['INPUT', 'TEXTAREA'].includes(e.tagName) && hasPopup(e) || (e.tagName === 'INPUT' && hasPopup(e) && e.getAttribute('role') === 'combobox');
+    return {cands: cands(e), label: lab || e.placeholder || e.name || '', type: e.tagName === 'SELECT' ? 'select' : custom ? 'combo' : e.isContentEditable || (e.getAttribute('role') === 'textbox' && !['INPUT', 'TEXTAREA'].includes(e.tagName)) ? 'richtext' : (e.type || e.tagName.toLowerCase()),
       required: req, placeholder: e.placeholder || '', auto: g('autocomplete'), pattern: g('pattern'), maxlength: +g('maxlength') || 0, minlength: +g('minlength') || 0,
-      min: g('min'), max: g('max'), step: g('step'), inputmode: g('inputmode'),
+      min: g('min'), max: g('max'), step: g('step'), inputmode: g('inputmode'), name: g('name'), id: e.id || '',
       options: e.tagName === 'SELECT' ? [...e.options].map(o => ({t: o.text.trim(), v: o.value, off: o.disabled || !o.value})) : undefined};
   });
-  // the form or panel that holds these fields, and any fields in it that are hidden right now (other wizard sections)
   let box = els.length ? (els[0].closest('form') || els[0].parentElement) : null;
   while (box && box.parentElement && els.filter(e => box.contains(e)).length < els.length * 0.8 && box !== document.body) box = box.parentElement;
-  const hid = b => b ? [...b.querySelectorAll('input,select,textarea')].filter(e => !['hidden', 'submit', 'button', 'reset', 'image'].includes(e.type) && !vis(e)).map(sel) : [];
+  const hid = b => b ? deep('input,select,textarea', b).filter(e => !['hidden', 'submit', 'button', 'reset', 'image'].includes(e.type) && !vis(e)).map(e => e.id || e.name || path(e)) : [];
   let hidden = hid(box);
   if (box && !hidden.length) { let up = box; for (let k = 0; k < 5 && up.parentElement && up !== document.body; k++) { up = up.parentElement; const h = hid(up); if (h.length) { box = up; hidden = h; break; } } }
   const stepper = !!document.querySelector('[role=tab],[aria-current=step],[class*=stepper i],[class*=wizard i],[class*=progress-step i]');
   const root = box ? (box.closest('[role=dialog],dialog,.modal,main,section,article') || box.parentElement || box) : document.body;
   const rgb = s => (s.match(/[\d.]+/g) || []).map(Number);
-  const btns = [...root.querySelectorAll('button,[type=submit],a[role=button],a.btn,input[type=submit]')].filter(vis).filter(b => !b.disabled && !b.closest('nav,aside,header,[role=navigation]')).map((b, i, arr) => {
+  const btns = deep('button,[type=submit],a[role=button],a.btn,input[type=submit]', root).filter(vis).filter(b => !b.disabled && !b.closest('nav,aside,header,[role=navigation]')).map((b, i) => {
     const cs = getComputedStyle(b), bg = rgb(cs.backgroundColor), a = bg.length > 3 ? bg[3] : 1;
     const sat = bg.length >= 3 && a > 0.3 ? (Math.max(...bg.slice(0, 3)) - Math.min(...bg.slice(0, 3))) / 255 : 0;
     const dark = bg.length >= 3 && a > 0.3 && Math.max(...bg.slice(0, 3)) < 80;
     const kl = ((b.className && b.className.baseVal === undefined ? b.className : '') + ' ' + (b.getAttribute('data-bs-dismiss') || b.getAttribute('data-dismiss') || '') + ' ' + (b.getAttribute('aria-label') || '')).toLowerCase();
     const secondary = /cancel|secondary|outline|ghost|link|light|neutral|close|dismiss|back|prev|reset|tertiary/.test(kl) || b.type === 'reset' || b.hasAttribute('formnovalidate');
     const main = /primary|success|confirm|cta|accent|brand/.test(kl);
-    let score = (b.type === 'submit' ? 5 : 0) + (sat > 0.25 || dark ? 4 : 0) + (main ? 3 : 0) - (secondary ? 6 : 0) + (box && box.contains(b) ? 1 : 0) + Math.min(b.innerText.length, 30) * 0.01 + i * 0.0001;
-    return {sel: sel(b), name: txt(b), score, submit: b.type === 'submit'};
+    const name = txt(b);
+    let score = (b.type === 'submit' ? 5 : 0) + (sat > 0.25 || dark ? 4 : 0) + (main ? 3 : 0) - (secondary ? 6 : 0) + (box && box.contains(b) ? 1 : 0) + Math.min(name.length, 30) * 0.01 + i * 0.0001;
+    return {cands: cands(b), name, score, submit: b.type === 'submit'};
   }).filter(b => b.name && b.name.length < 40);
   btns.sort((x, y) => y.score - x.score);
-  return {fields, btns, hidden, stepper, sig: fields.map(f => f.sel).join('|')};
+  return {fields, btns, hidden, stepper, sig: fields.map(f => f.cands[f.cands.length - 1]).join('|')};
 }"""
+
+OPTIONS_JS = r"""() => [...document.querySelectorAll('[role=option],[role=menuitem],[role=menuitemradio]')].filter(e => { const r = e.getBoundingClientRect(); const s = getComputedStyle(e);
+  return r.width > 2 && r.height > 2 && s.visibility !== 'hidden' && s.display !== 'none' && e.getAttribute('aria-disabled') !== 'true' && !e.hasAttribute('disabled'); })
+  .map(e => (e.innerText || e.textContent || '').replace(/\s+/g, ' ').trim()).filter(t => t && !/^[-–—_.\s]+$/.test(t))"""
+
+
+def pick_sel(scope, cands, prefix=""):
+    """First selector that matches exactly one thing on the live page. Stable ones (id, test id, name, role and label) come first."""
+    for s_ in cands:
+        try:
+            if scope.locator(s_).count() == 1:
+                return prefix + s_
+        except Exception:
+            continue
+    return prefix + cands[-1]
 
 
 SENSITIVE = re.compile(r"cc-|one-time-code|passw|passcode|\bcvv\b|\bcvc\b|\botp\b|\bpin\b|card ?n|aadhaar|aadhar|\bssn\b|iban|account ?n|\bifsc\b|secret|api.?key|token")
@@ -412,9 +460,9 @@ def fallback_values(f):
     return [v[:cap] if len(v) >= n else v.ljust(n, "x")[:cap] for v in base]
 
 
-def fill_valid(page, f, val):
+def fill_valid(page, f, val, prefix=""):
     """Type the value, then ask the browser whether the field accepts it. Try other values if not."""
-    loc = page.locator(f["sel"]).first
+    loc = page.locator(f["sel"][len(prefix):]).first
     tries = [val] if val else []
     tries += fallback_values(f) if f["type"] not in ("date", "time", "number") else []
     for v in dict.fromkeys(t for t in tries if t):
@@ -425,6 +473,20 @@ def fill_valid(page, f, val):
         except Exception:
             return v, True
     return (tries[0] if tries else ""), False
+
+
+def frame_prefix(page, fr):
+    """Selector prefix that reaches inside an iframe: `iframe#x >> internal:control=enter-frame >> `."""
+    try:
+        fe = fr.frame_element()
+        cands = fe.evaluate("""e => [e.id && '#' + CSS.escape(e.id), e.name && 'iframe[name="' + e.name + '"]', e.getAttribute('src') && 'iframe[src="' + e.getAttribute('src') + '"]',
+                                    'iframe'].filter(Boolean).map(s => s.startsWith('#') ? 'iframe' + s : s)""")
+        for s_ in cands:
+            if page.locator(s_).count() == 1:
+                return s_ + " >> internal:control=enter-frame >> "
+    except Exception:
+        pass
+    return None
 
 
 def cmd_draft(a):
@@ -450,22 +512,41 @@ def cmd_draft(a):
             steps.append({"text": f"Click **{pre}**." if tgt != pre else "Click the button.", **({"goto": path} if not steps else {}), "click": tgt})
             page.locator(tgt).first.click(timeout=6000)
             page.wait_for_timeout(600)
+        scope, prefix = page, ""
+        if a.frame:
+            prefix = a.frame + " >> internal:control=enter-frame >> "
+            fr_obj = next((f_ for f_ in page.frames if f_ != page.main_frame and f_.frame_element().evaluate("(e, s) => e.matches(s)", a.frame)), None)
+            scope = fr_obj or page
+        elif not page.evaluate(DRAFT_JS)["fields"]:         # nothing in the page itself: look inside iframes
+            for fr in page.frames[1:]:
+                try:
+                    if fr.evaluate(DRAFT_JS)["fields"]:
+                        pf = frame_prefix(page, fr)
+                        if pf:
+                            scope, prefix = fr, pf
+                            notes.append("The form is inside an iframe. I worked inside it.")
+                            break
+                except Exception:
+                    continue
         advanced, done_sel = 0, set()
         for sec in range(1, 13):
-            d = page.evaluate(DRAFT_JS)
+            d = scope.evaluate(DRAFT_JS)
             if not d["fields"] and sec == 1:
                 names = [b["name"] for b in d["btns"]][:8]
-                notes.append("No form is open on this page." + (f" Buttons here: {', '.join(names)}. Pick the one that opens the form and pass it with --pre." if names else ""))
+                notes.append("No form is open on this page." + (f" Buttons here: {', '.join(names)}. Ask the person which one opens the form, then pass it with --pre." if names else " Ask the person where the form is."))
             for f in d["fields"]:
+                f["sel"] = pick_sel(scope, f["cands"], prefix)
                 if f["sel"] in done_sel:
                     continue
                 done_sel.add(f["sel"])
-                if f["type"] == "password" or SENSITIVE.search(f"{f['label']} {f['placeholder']} {f.get('auto', '')} {f['sel']}".lower()):
-                    steps.append({"text": f"Type your **{f['label']}**. Do it yourself, this guide never types it.", "look": True, "marks": [{"target": f["sel"]}]})
+                loc = scope.locator(f["sel"][len(prefix):]).first
+                sens = f["type"] == "password" or SENSITIVE.search(f"{f['label']} {f['placeholder']} {f.get('auto', '')} {f['name']} {f['id']}".lower())
+                if sens:
+                    steps.append({"text": f"Type your **{f['label']}**. Do it yourself, this guide never types it.", "look": "password", "marks": [{"target": f["sel"]}]})
                     notes.append(f"'{f['label']}' looks like a password, card, OTP or ID number, so it is look-only. Never put a real one in a guide.")
                     continue
                 if f["type"] == "file":
-                    steps.append({"text": f"Click **{f['label']}** and choose a file from your computer.", "look": True, "marks": [{"target": f["sel"]}]})
+                    steps.append({"text": f"Click **{f['label']}** and choose a file from your computer.", "look": "upload", "marks": [{"target": f["sel"]}]})
                     continue
                 need = "required" if f["required"] else "optional, you can leave it empty"
                 if f["type"] == "select":
@@ -474,38 +555,63 @@ def cmd_draft(a):
                         continue
                     pick = opts[0]["t"]
                     steps.append({"text": f"Open **{f['label']}** ({need}) and choose **{pick}**.", "select": [f["sel"], pick]})
-                    page.locator(f["sel"]).first.select_option(label=pick)
+                    loc.select_option(label=pick)
+                elif f["type"] == "combo":
+                    loc.click(timeout=5000)
+                    page.wait_for_timeout(450)
+                    opts = (scope if hasattr(scope, "evaluate") else page).evaluate(OPTIONS_JS)
+                    if not opts:
+                        notes.append(f"ASK: '{f['label']}' looks like a custom dropdown but no list opened. Ask the person how to pick a value, or add the steps by hand.")
+                        page.keyboard.press("Escape")
+                        continue
+                    steps.append({"text": f"Click **{f['label']}** ({need}) to open the list.", "click": f["sel"]})
+                    pick = opts[0]
+                    osel = prefix + f'role=option[name="{pick}"]'
+                    if scope.locator(osel[len(prefix):]).count() != 1:
+                        osel = prefix + f'role=menuitem[name="{pick}"]'
+                    steps.append({"text": f"Choose **{pick}** from the list.", "click": osel})
+                    try:
+                        scope.locator(osel[len(prefix):]).first.click(timeout=3000)
+                    except Exception:
+                        page.keyboard.press("Escape")
+                    page.wait_for_timeout(300)
                 elif f["type"] in ("checkbox", "radio"):
                     steps.append({"text": f"Tick **{f['label']}** ({need}).", "click": f["sel"]})
-                    page.locator(f["sel"]).first.check()
+                    loc.check()
+                elif f["type"] == "richtext":
+                    val = "Sample text for this guide."
+                    steps.append({"text": f"Click **{f['label']}** ({need}) and type {val}", "fill": [f["sel"], val]})
+                    loc.fill(val)
                 else:
-                    val, ok = fill_valid(page, f, sample_for(f))
+                    val, ok = fill_valid(scope, f, sample_for(f), prefix)
                     if not ok:
                         notes.append(f"'{f['label']}': no sample value passed its own validation. Check the value in that step.")
                     steps.append({"text": f"Click **{f['label']}** ({need}) and type {val}.", "fill": [f["sel"], val]})
                 fields.append({"name": f["label"], "required": f["required"], "help": "", "example": ""})
             btns = d["btns"]
+            for b_ in btns:
+                b_["sel"] = pick_sel(scope, b_["cands"], prefix)
             named = lambda n_: next((b for b in btns if b["name"].strip().lower() == n_.strip().lower()), None) if n_ else None
             unseen = [h for h in d["hidden"] if h not in done_sel]
             more = bool(unseen) or (d["stepper"] and bool(btns) and not btns[0]["submit"])
             primary = named(a.advance if more else a.finish) or (btns[0] if btns else None)
             if primary and len(btns) > 1 and abs(btns[0]["score"] - btns[1]["score"]) < 0.5 and not named(a.advance if more else a.finish):
-                notes.append(f"Could not tell '{btns[0]['name']}' from '{btns[1]['name']}' by style, so I picked '{btns[0]['name']}'. "
-                             f"If that is wrong, run again with --{'advance' if more else 'finish'} \"{btns[1]['name']}\".")
+                notes.append(f"ASK: could not tell '{btns[0]['name']}' from '{btns[1]['name']}' by style, so I picked '{btns[0]['name']}'. "
+                             f"Ask the person which is right. If it is the other one, run again with --{'advance' if more else 'finish'} \"{btns[1]['name']}\".")
             if primary and more and advanced < 10:
                 before = d["sig"]
                 steps.append({"text": f"Click **{primary['name']}**.", "click": primary["sel"]})
-                page.locator(primary["sel"]).first.click(timeout=6000)
+                scope.locator(primary["sel"][len(prefix):]).first.click(timeout=6000)
                 page.wait_for_timeout(700)
                 advanced += 1
-                if page.evaluate(DRAFT_JS)["sig"] == before:
-                    notes.append(f"'{primary['name']}' did not open a new section. The form may have checks that failed, or this was the last step. Look at it before running.")
+                if scope.evaluate(DRAFT_JS)["sig"] == before:
+                    notes.append(f"ASK: '{primary['name']}' did not open a new section. Checks may have failed, or this was the last step. Look at the page, then ask the person.")
                     break
                 continue
             if primary:
                 steps.append({"text": f"Click **{primary['name']}**.", "click": primary["sel"], "warning": "This saves the record. Use test data on staging."})
             else:
-                notes.append("No Save or Submit button was found. Add the last click by hand.")
+                notes.append("ASK: no Save or Submit button was found. Ask the person which button finishes the task.")
             break
         br.close()
     last = {"text": "You see the confirmation. (Write what the screen shows here.)", "shot": True}
@@ -520,8 +626,9 @@ def cmd_draft(a):
     json.dump(spec, open(a.out, "w"), indent=1, ensure_ascii=False)
     print(f"wrote {a.out}: {len(steps)} steps, {len(fields)} fields. It reads the live page: field attributes, hidden sections, and the main button.")
     for n in notes:
-        print("  check: " + n)
-    print("Now rewrite each step's text in plain words, add help and example to the fields, and run it.")
+        print(n if n.startswith("ASK:") else "  check: " + n)
+    print("Any line starting with ASK: goes to the person with AskUserQuestion before you run the spec.\n"
+          "Then rewrite each step's text in plain words, add help and example to the fields, and run it.")
 
 
 def cmd_fields(a):
@@ -837,7 +944,7 @@ def studio_step(S, page, st, i, n, action, tgt_box, boxes, texts, audios, dsec, 
         S.t += dur
         S.pos = [tx, ty]
         t_click = S.t
-        if action in ("click", "fill", "select"):
+        if action in ("click", "fill", "select", "drag"):
             S.clicks.append(round(t_click, 3))
         page.mouse.move(tx, ty)
         hold_after = 0.6
@@ -878,6 +985,14 @@ def studio_step(S, page, st, i, n, action, tgt_box, boxes, texts, audios, dsec, 
             page.locator(st["select"][0]).first.select_option(st["select"][1])
         elif action == "press":
             page.keyboard.press(st["press"])
+        elif action == "drag":
+            db = box_of(page, st["drag"][1], False)
+            dx, dy = db[0] + db[2] / 2, db[1] + db[3] / 2
+            S.cursor.append((round(S.t, 3), round(S.t + 0.8, 3), tx, ty, dx, dy))
+            S.t += 0.8
+            S.pos = [dx, dy]
+            t_click = S.t
+            page.drag_and_drop(st["drag"][0], st["drag"][1])
         if "wait" in st:
             w = st["wait"]
             page.wait_for_timeout(w) if isinstance(w, int) else page.wait_for_selector(w, timeout=10000)
@@ -933,13 +1048,17 @@ def check_steps(task, env):
     if env == "production":
         return []
     out, steps = [], task["steps"]
-    acts = ("click", "fill", "select", "press")
+    acts = ("click", "fill", "select", "press", "drag")
     for i, st in enumerate(steps, 1):
         if st.get("look"):
             continue
         has_act = any(k in st for k in acts)
         if (st.get("marks") or st.get("shot")) and not has_act and i not in (1, len(steps)) and not st.get("wait"):
             out.append(f"step {i} ({st.get('text', '')[:50]!r}) shows boxes but does nothing. Add click, fill or select, or set \"look\": true if it only points something out.")
+    looks = [i for i, st in enumerate(steps, 1) if st.get("look")]
+    cap = max(2, len(steps) // 4)
+    if len(looks) > cap and not task.get("allow_look"):
+        out.append(f"{len(looks)} of {len(steps)} steps are look-only. Only passwords, uploads and notes may be. Do the others for real, or set \"allow_look\": true on the task if you must.")
     fields = task.get("fields") or []
     req = [f for f in fields if f.get("required")]
     done = sum(1 for st in steps if "fill" in st or "select" in st)
@@ -1002,9 +1121,16 @@ def run_task(p, spec, ws, task, video, accent):
             if (t.get_attribute("type") or "").lower() == "password":
                 die(f"{slug} step {i}: will not type into a password field. Sign in with the login command instead.")
         marks_in = list(st.get("marks") or [])
-        if not marks_in and action in ("click", "fill", "select"):
+        if not marks_in and action in ("click", "fill", "select", "drag"):
             tgt = st[action][0] if isinstance(st[action], list) else st[action]
             marks_in = [{"target": tgt}]
+        if not marks_in and st.get("shot") and not action:    # the confirmation: find the success message on screen, whatever it says
+            try:
+                tsel = ":is([role=alert],[role=status],[class*=toast i],[class*=snack i],[class*=notif i],[class*=flash i],[class*=alert i]):visible"
+                if page.locator(tsel).count() >= 1:
+                    marks_in = [{"target": tsel}]
+            except Exception:
+                pass
         out = {"text": st["text"]}
         boxes = []
         want_shot = bool(marks_in) or st.get("shot") or st.get("blur")
@@ -1071,7 +1197,7 @@ def run_task(p, spec, ws, task, video, accent):
                 except Exception:
                     pass
             tgt = None
-            if action in ("click", "fill", "select"):
+            if action in ("click", "fill", "select", "drag"):
                 tgt = st[action][0] if isinstance(st[action], list) else st[action]
             tb = None
             if tgt:
@@ -1091,7 +1217,7 @@ def run_task(p, spec, ws, task, video, accent):
             studio_step(S, page, st, i, len(task["steps"]), action, tb, boxes, texts, audios, dsec, spec, bool(boxes) and not tgt)
         elif video:
             tgt = None
-            if action in ("click", "fill", "select"):
+            if action in ("click", "fill", "select", "drag"):
                 tgt = st[action][0] if isinstance(st[action], list) else st[action]
             if boxes:
                 b = boxes[0] if tgt is None else (box_of(page, tgt) if tgt not in [m["target"] for m in marks_in] else boxes[[m["target"] for m in marks_in].index(tgt)])
@@ -1210,6 +1336,8 @@ def run_task(p, spec, ws, task, video, accent):
 
 def cmd_run(a):
     spec = json.load(open(a.spec))
+    if getattr(a, "preview", False):
+        spec["quality"] = "draft"       # 1080p at 30 fps: renders in seconds, good enough to check the steps
     ws = a.ws
     state_json = os.path.join(ws, "state.json")
     accent = "#1C75BC"
@@ -1344,12 +1472,12 @@ def main():
     s = sub.add_parser("login"); s.add_argument("--url", required=True); s.add_argument("--out", required=True); s.set_defaults(f=cmd_login)
     s = sub.add_parser("explore"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--wait"); s.set_defaults(f=cmd_explore)
     s = sub.add_parser("update"); s.add_argument("--ws", required=True); s.add_argument("--no-video", action="store_true"); s.add_argument("--threshold", type=float, default=0.01); s.set_defaults(f=cmd_update)
-    s = sub.add_parser("chrome"); s.add_argument("--url", default=""); s.set_defaults(f=cmd_chrome)
+    s = sub.add_parser("chrome"); s.add_argument("--url", default=""); s.add_argument("--stop", action="store_true"); s.set_defaults(f=cmd_chrome)
     s = sub.add_parser("draft"); s.add_argument("--url", required=True); s.add_argument("--title", required=True); s.add_argument("--out", default="spec.json")
-    s.add_argument("--state"); s.add_argument("--pre", action="append"); s.add_argument("--confirm", default=""); s.add_argument("--advance", default=""); s.add_argument("--finish", default=""); s.add_argument("--env", choices=["local", "staging"]); s.set_defaults(f=cmd_draft)
+    s.add_argument("--state"); s.add_argument("--pre", action="append"); s.add_argument("--confirm", default=""); s.add_argument("--advance", default=""); s.add_argument("--finish", default=""); s.add_argument("--env", choices=["local", "staging"]); s.add_argument("--frame"); s.set_defaults(f=cmd_draft)
     s = sub.add_parser("fields"); s.add_argument("--url", required=True); s.add_argument("--state"); s.add_argument("--click", action="append"); s.add_argument("--json"); s.set_defaults(f=cmd_fields)
     s = sub.add_parser("run"); s.add_argument("--ws", required=True); s.add_argument("--spec", required=True)
-    s.add_argument("--no-video", action="store_true"); s.add_argument("--only"); s.set_defaults(f=cmd_run)
+    s.add_argument("--no-video", action="store_true"); s.add_argument("--only"); s.add_argument("--preview", action="store_true"); s.set_defaults(f=cmd_run)
     a = ap.parse_args()
     a.f(a)
 

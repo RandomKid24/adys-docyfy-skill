@@ -129,7 +129,7 @@ Set options in the capture spec header:
 | `highlight` | `auto` | `auto` shows the caption on click steps and a soft ring on look-only steps. `full` rings every mark. `caption` shows captions only |
 | `engine` | `studio` | `live` records the browser as it runs (1280 px, less smooth) |
 
-Use `draft` while checking and `4k` for the final pass. 4K takes a few minutes per task on a laptop and is much faster on a Mac with ffmpeg's VideoToolbox encoder.
+Use `capture.py run --preview` (or `draft`) while checking, it renders in seconds. Run the 4K pass once, at the end, after you have approved the steps. 4K takes a few minutes per task on a laptop and is much faster on a Mac with ffmpeg's VideoToolbox encoder.
 
 ### Hindi, Marathi and English (captions only)
 
@@ -190,6 +190,17 @@ For long or confusing flows, Claude can first walk the task in your own signed-i
 
 `capture.py draft --url FORM_URL --title "Add an employee"` opens the form and does it for real. It writes one step per field in page order, each Next click in a wizard, and the final Save, with sample data and required or optional in the text. It reads the live page, not a list of words, so it works in any language and any layout. Sample values come from each field's own type, pattern, length limits and the example shown in its box, and the browser is asked whether the field accepts the value. Hidden sections show where a wizard continues. The main button is picked from its style and type, and it says so when it cannot tell Save from Cancel (use `--advance "Name"` or `--finish "Name"` to choose). If the page has no form open, it lists the buttons so you can pass the right one with `--pre`. Passwords and file uploads become look-only steps. Edit the words, keep the steps. On local and staging, `capture.py run` stops if a step only shows boxes and does nothing, or if the form's required fields are not all filled.
 
+### What draft can handle
+
+- **Custom dropdowns** (a box that opens a list of options, not a plain `<select>`) become two steps: open the list, choose the first real option. If no list opens, it prints an `ASK:` line.
+- **Fields inside iframes and web components** are found. Selectors reach into the frame.
+- **Rich text boxes** are typed into like any field.
+- **Selectors** try id, test id, name, then role and label before falling back to a position path, and each is checked to match exactly one thing.
+- **Drag and drop:** write a step with `"drag": ["#from", "#to"]`.
+- **Confirmation:** a last step with `"shot": true` and no marks finds the toast or success message on screen by itself.
+- **Look-only steps** must say why: `"look": "password"`, `"upload"` or `"info"`. A task where more than a quarter of the steps are look-only is refused.
+- **`ASK:` lines.** Anything the scripts could not decide is printed as a line starting with `ASK:`. Claude puts each one to you before going on.
+
 ## Finding every field
 
 `capture.py fields --url PAGE` prints every field on the page, whole page, marked REQUIRED or optional, with the tabs and the buttons at the bottom. Add `--json out.json` to get a starting `fields` table for the guide. The checker warns when a task ends on Next, never says what the reader sees at the end, or leaves a field without required or optional.
@@ -217,6 +228,14 @@ bin/install.js        the npx installer
 ```
 
 The skill is token optimized. `SKILL.md` stays small, each step loads its own reference file, clicking and drawing run in scripts, pages are read as text instead of pictures, and progress is saved so nothing is redone.
+
+## Tests
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Eleven tests cover the planner, the environment check, the step check, the memory file, and drafting on a wizard, a Hindi form, a custom dropdown with a shadow-DOM field, and an iframe. Browser tests skip if Chrome is missing. A GitHub Action runs them on every push.
 
 ## Known limits
 

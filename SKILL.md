@@ -32,11 +32,12 @@ Run `plan.py --ws W --url URL --register`. It reads the menu, ranks the tasks, a
 Do the first module fully (capture, check, build). Show what came out in two lines and ask once: keep this style for the rest, or change something. After that, continue module by module without stopping, with one short line per module. Say `next module` only if the person asked to approve each one. Sort out each module before the next, never half-do many.
 
 ## When you are unsure, ask
-Use AskUserQuestion (one call, up to 4 questions, with a default marked) instead of guessing when: a sign-in or role decides what is visible; a form's required data is unclear (an ID that must exist, a value that must be unique); `draft` prints a `check:` line; a button could be Save or Cancel; a step would delete, send or pay; a page is empty and you would need real records; two modules overlap; or a task ran in a different order than expected. If nobody can answer (a scheduled run), take the safest reading, say what you chose at the top of the work, and record it with `progress.py note`.
+Use AskUserQuestion (one call, up to 4 questions, with a default marked) instead of guessing when: a sign-in or role decides what is visible; a form's required data is unclear (an ID that must exist, a value that must be unique); `draft` prints a `check:` line, or any script prints a line starting `ASK:` (put every ASK: line to the person); a button could be Save or Cancel; a step would delete, send or pay; a page is empty and you would need real records; two modules overlap; or a task ran in a different order than expected. If nobody can answer (a scheduled run), take the safest reading, say what you chose at the top of the work, and record it with `progress.py note`.
 
 ## Step 3. Capture, one module at a time
 Default: `references/fast-capture.md` (Playwright on this machine, needs no per-click round trips). If the app is not reachable from here (SSO, captcha, private network, no Playwright): `references/browser-capture.md`, then `references/capture.md`.
 Flow unclear, long, or many tabs and wizard sections: scout it first in the person's signed-in Chrome with Claude in Chrome (`references/scout.md`), then capture from the spec you wrote.
+Render videos with `--preview` first (seconds, not minutes). Only after the steps are right, run the 4K pass once.
 Videos and languages: read `references/video.md`. Native dropdowns (`select` steps) are drawn open automatically in both screenshots and videos. A PDF cannot play video, so never promise one inside it.
 
 ## Step 4. Finish
