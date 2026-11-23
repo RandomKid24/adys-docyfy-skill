@@ -45,6 +45,7 @@ class Timeline:
         self.t = 0.0
         self.stills, self.cursor, self.clicks = [], [], []
         self.captions, self.rings, self.zooms, self.audio = [], [], [], []
+        self.ibeam = []
         self.pos = [vw * 0.5, vh * 0.62]
         self.start_pos = list(self.pos)
         self.n = 0
@@ -53,7 +54,7 @@ class Timeline:
         W, H, _ = QUALITY[self.quality]
         return needed_dpr(W, H, self.vw, self.vh, self.zmax)
 
-    def snap(self, page, t, fade=0.2):
+    def snap(self, page, t, fade=0.2, scroll=None):
         self.n += 1
         path = os.path.join(self.tmp, f"still{self.n}.png")
         page.screenshot(path=path)
@@ -61,12 +62,12 @@ class Timeline:
             self.scroll = page.evaluate("[Math.round(scrollX), Math.round(scrollY)]")
         except Exception:
             self.scroll = None
-        self.stills.append([round(t, 3), path, fade if self.stills else 0.0])
+        self.stills.append([round(t, 3), path, fade if self.stills else 0.0] + ([list(scroll)] if scroll and self.stills else []))
 
     # ---- rendering -------------------------------------------------------------------------------------------
     def save(self, path, lang="en"):
         d = {k: getattr(self, k) for k in ("tmp", "vw", "vh", "accent", "app", "quality", "zmax", "stills", "cursor", "clicks",
-                                           "rings", "zooms", "start_pos")}
+                                           "rings", "zooms", "start_pos", "ibeam")}
         d["captions"] = [(a, b, texts.get(lang) or texts["en"], chips.get(lang) or chips.get("en", ""), avoid)
                          for a, b, texts, chips, avoid in self.captions]
         d["audio"] = [(p, t) for p, t, lg in self.audio if lg == lang]
@@ -182,11 +183,32 @@ def _scaled(path):
     return im.resize((int(round(d["vw"] * ps)), int(round(d["vh"] * ps))), Image.LANCZOS)
 
 
+def _scroll_mix(prev, cur, dy, f):
+    """A real scroll between two stills. Rows slide by the scrolled distance; new rows come from the second still."""
+    from PIL import Image
+    d, L = G["d"], G["L"]
+    ps = L["s"] * d["zmax"]
+    A, B = _scaled(prev), _scaled(cur)
+    H = A.height
+    D = min(H, int(round(abs(dy) * ps)))
+    m = int(round(sm5(min(1.0, max(0.0, f))) * D))
+    out = Image.new("RGB", A.size)
+    if D <= 0 or m <= 0:
+        return A
+    if dy > 0:       # scrolled down
+        out.paste(A.crop((0, m, A.width, H)), (0, 0))
+        out.paste(B.crop((0, H - D, A.width, H - D + m)), (0, H - m))
+    else:
+        out.paste(A.crop((0, 0, A.width, H - m)), (0, m))
+        out.paste(B.crop((0, D - m, A.width, D)), (0, 0))
+    return out
+
+
 def _page_view(path, z, sx, sy):
     from PIL import Image
     d, L = G["d"], G["L"]
     ps = L["s"] * d["zmax"]
-    im = _scaled(path)
+    im = _scaled(path) if isinstance(path, str) else path
     vw, vh = d["vw"], d["vh"]
     box = (sx * ps, sy * ps, (sx + vw / z) * ps, (sy + vh / z) * ps)
     return im.transform((L["Wp"], L["Hp"]), Image.EXTENT, box, Image.BICUBIC)
@@ -209,6 +231,14 @@ def _zoom_state(t):
     return z, sx, sy
 
 
+def _hand(u):
+    """Quick start, long gentle stop, and a small overshoot that settles back, like a real hand."""
+    w = 0.5 * (u + sm(u))
+    c1 = 0.9
+    c3 = c1 + 1
+    return 1 + c3 * (w - 1) ** 3 + c1 * (w - 1) ** 2
+
+
 def _cursor_pos(t):
     d = G["d"]
     segs = d["cursor"]
@@ -219,7 +249,8 @@ def _cursor_pos(t):
         if t >= t1:
             pos = [x1, y1]
             continue
-        u = sm5((t - t0) / (t1 - t0))
+        raw = (t - t0) / (t1 - t0)
+        u = _hand(raw)
         dx, dy = x1 - x0, y1 - y0
         dist = math.hypot(dx, dy) or 1.0
         bend = 0.14 * dist
@@ -227,8 +258,35 @@ def _cursor_pos(t):
         cx, cy = (x0 + x1) / 2 + nx * bend, (y0 + y1) / 2 + ny * bend
         px = (1 - u) ** 2 * x0 + 2 * (1 - u) * u * cx + u ** 2 * x1
         py = (1 - u) ** 2 * y0 + 2 * (1 - u) * u * cy + u ** 2 * y1
-        return px, py
+        tr = math.sin(math.pi * raw) * min(1.2, dist * 0.004)       # a hand is never perfectly steady
+        ph = t0 * 12.9898
+        return px + tr * math.sin(2 * math.pi * 5.0 * raw + ph), py + tr * math.sin(2 * math.pi * 4.0 * raw + ph * 1.7)
     return pos[0], pos[1]
+
+
+def _ibeam_sprite(scale):
+    from PIL import Image, ImageDraw
+    key = ("i", round(scale, 2))
+    if key in G["cur"]:
+        return G["cur"][key]
+    H = G["d"]["H"]
+    h = max(20, int(H * 0.04 * scale))
+    w = max(10, h // 2)
+    K = 6
+    im = Image.new("RGBA", (w * K, h * K), (0, 0, 0, 0))
+    dr = ImageDraw.Draw(im)
+    cx, t = w * K // 2, h * K
+
+    def bar(fill, grow):
+        g = grow * K
+        dr.rectangle([cx - 1.3 * K - g, 0.06 * t - g, cx + 1.3 * K + g, 0.94 * t + g], fill=fill)
+        dr.rectangle([cx - 4.2 * K - g, 0.06 * t - g, cx + 4.2 * K + g, 0.06 * t + 1.8 * K + g], fill=fill)
+        dr.rectangle([cx - 4.2 * K - g, 0.94 * t - 1.8 * K - g, cx + 4.2 * K + g, 0.94 * t + g], fill=fill)
+    bar((255, 255, 255, 255), 1.0)
+    bar((20, 18, 19, 255), 0.0)
+    out = im.resize((w, h), Image.LANCZOS)
+    G["cur"][key] = (out, (w / 2, h / 2))
+    return G["cur"][key]
 
 
 def _cursor_sprite(scale):
@@ -345,8 +403,12 @@ def _body(t):
     for k, s in enumerate(stills):
         if s[0] <= t:
             i = k
-    cur = _page_view(stills[i][1], z, sx, sy)
-    if i > 0 and stills[i][2] > 0:
+    sc = stills[i][3] if len(stills[i]) > 3 else None
+    if i > 0 and sc and 0 <= t - stills[i][0] < sc[1]:
+        cur = _page_view(_scroll_mix(stills[i - 1][1], stills[i][1], sc[0], (t - stills[i][0]) / sc[1]), z, sx, sy)
+    else:
+        cur = _page_view(stills[i][1], z, sx, sy)
+    if i > 0 and stills[i][2] > 0 and not sc:
         f = sm((t - stills[i][0]) / stills[i][2])
         if f < 1:
             prev = _page_view(stills[i - 1][1], z, sx, sy)
@@ -385,7 +447,8 @@ def _body(t):
         dt = t - tc
         if 0 <= dt < 0.3:
             squish = 1 - 0.16 * (sm(dt / 0.09) if dt < 0.09 else 1 - sm((dt - 0.09) / 0.21))
-    sprite, hot = _cursor_sprite(squish)
+    typing = any(a <= t <= b for a, b in d.get("ibeam", []))
+    sprite, hot = _ibeam_sprite(1.0) if typing else _cursor_sprite(squish)
     px, py = to_screen(cx, cy)
     base.paste(sprite, (int(round(px - hot[0])), int(round(py - hot[1]))), sprite)
     # captions

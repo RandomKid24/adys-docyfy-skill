@@ -937,16 +937,22 @@ def studio_step(S, page, st, i, n, action, tgt_box, boxes, texts, audios, dsec, 
     if tgt_box is not None and action:
         tx, ty = tgt_box[0] + tgt_box[2] / 2, tgt_box[1] + tgt_box[3] / 2
         dist = math.hypot(tx - S.pos[0], ty - S.pos[1])
-        dur = 0.6 + min(0.7, dist / (vw * 1.3))
+        dur = 0.5 + 0.7 * min(1.0, dist / (vw * 0.9)) ** 0.7        # farther takes longer, short hops stay quick
         z_in = S.t
         cap_end = z_in + 0.3          # the sentence is done once the cursor moves; keeps the caption off open lists
         S.cursor.append((round(S.t, 3), round(S.t + dur, 3), S.pos[0], S.pos[1], tx, ty))
         S.t += dur
         S.pos = [tx, ty]
+        page.mouse.move(tx, ty)
+        if action in ("click", "select", "drag"):          # rest on the target so the button shows its hover colour, then press
+            page.wait_for_timeout(140)
+            S.snap(page, S.t + 0.04, fade=0.12)
+            S.t += 0.3
+        else:
+            S.t += 0.12
         t_click = S.t
         if action in ("click", "fill", "select", "drag"):
             S.clicks.append(round(t_click, 3))
-        page.mouse.move(tx, ty)
         hold_after = 0.6
         dd = dd_open(page, st["select"][0], st["select"][1], S.accent, False) if action == "select" and isinstance(st["select"], list) else None
         if dd:
@@ -978,8 +984,9 @@ def studio_step(S, page, st, i, n, action, tgt_box, boxes, texts, audios, dsec, 
             for k in range(0, len(val), step):
                 chunk = val[k:k + step]
                 page.keyboard.type(chunk)
-                S.t += 0.07 * len(chunk)
+                S.t += 0.075 * len(chunk) + (0.12 if chunk.endswith((' ', '.', ',', '@')) else 0)
                 S.snap(page, S.t, fade=0.0)
+            S.ibeam.append((round(t_click - 0.05, 3), round(S.t + 0.5, 3)))
             t_click = S.t - 0.06
         elif action == "select":
             page.locator(st["select"][0]).first.select_option(st["select"][1])
@@ -1191,9 +1198,16 @@ def run_task(p, spec, ws, task, video, accent):
             else:
                 try:   # measuring a target scrolls it into view; the video must show that scrolled page
                     now_ = page.evaluate("[Math.round(scrollX), Math.round(scrollY)]")
-                    if now_ != getattr(S, "scroll", None):
-                        S.snap(page, S.t, fade=0.3)
-                        S.t += 0.35
+                    was_ = getattr(S, "scroll", None)
+                    if now_ != was_:
+                        dy_ = (now_[1] - was_[1]) if was_ and now_[0] == was_[0] else None
+                        if dy_ and abs(dy_) <= S.vh * 1.6:       # a real, smooth scroll
+                            sd_ = 0.55 + min(0.5, abs(dy_) / S.vh * 0.5)
+                            S.snap(page, S.t, fade=0.0, scroll=(dy_, sd_))
+                            S.t += sd_ + 0.2
+                        else:
+                            S.snap(page, S.t, fade=0.3)
+                            S.t += 0.35
                 except Exception:
                     pass
             tgt = None

@@ -38,3 +38,7 @@ A native `<select>` step (`"select": [target, "Sick leave"]`) shows the list ope
 Ask where the help site will be hosted. With an address, run `progress.py init ... --site-url https://help.example.com` (or set `brand.site_url` in `state.json`). Each task with a recording then gets a "Watch this as a short video" box in the PDF with the link and a QR code. With no address the PDF shows nothing about the recording.
 
 Use the MP4 for chat, email and the help site (it plays in the page). Add a GIF only for places that cannot play video.
+
+
+## Natural motion
+Built in, nothing to set. Cursor path with overshoot and tremor, travel time by distance, a hover rest before each click (the button shows its hover state), an I-beam cursor while typing, text typed in chunks, and a real smooth scroll when a target is below the fold. All of it is drawn from the captured stills, so it costs a few extra screenshots per step, not extra render time.

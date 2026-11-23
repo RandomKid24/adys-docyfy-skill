@@ -117,6 +117,8 @@ If the app is not reachable from your machine (single sign-on, captcha, private 
 
 Videos come from a studio renderer. It takes sharp stills of each page state, then draws the cursor, zoom, captions, click ripples and fades itself at 60 frames per second. Nothing is screen-recorded, so motion is even and the resolution is real.
 
+Motion is made to look like a person using the app. The cursor starts fast, overshoots the target by a hair, settles back, and shakes a little. Far targets take longer than near ones. It rests on a button for a moment so the hover colour shows, then presses. In a text box the cursor turns into an I-beam and the text is typed in pieces, with a short pause after spaces and dots. When a target is below the fold the page scrolls smoothly to it instead of jumping.
+
 The caption box is frosted glass: slightly see-through, with the page behind it blurred so the text stays sharp. It moves to the top of the window when the bottom spot would cover the button being clicked. A finished video has a title card, the recording in a Mac-style window, a "Step 2 of 4" chip on each caption, a smooth zoom toward each click target, a cursor that curves to the target and squeezes on the click, and an end card.
 
 Set options in the capture spec header:
